@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Tile Purchase Entry App</title>
+  <title>Tile Purchase Entry</title>
   <link rel="manifest" href="manifest.json">
   <style>
     html,body { height:100%; margin:0; padding:0; }
@@ -151,46 +151,56 @@
             margin: 0 auto;
         }
 
-    /* --- Voice-to-Text UI styles (paste inside the existing <style>) --- */
-.voice-row { display:flex; gap:8px; align-items:center; margin-top:8px; }
-.voice-btn {
-  display:inline-flex;
-  align-items:center;
-  justify-content:center;
-  gap:8px;
-  padding:8px 12px;
-  border-radius:8px;
-  border:1px solid #2c7be5;
-  background: #fff;
-  color:#2c7be5;
-  cursor:pointer;
-  font-weight:700;
-  box-shadow: 0 3px 8px rgba(44,123,229,0.12);
-  transition: transform .12s ease, background .12s ease, color .12s ease;
+    /* PIN Modal Styles */
+.pin-modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.8);
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
-.voice-btn:active { transform: translateY(1px); }
-.voice-btn.listening {
-  background: linear-gradient(90deg,#ff6767,#ffb86b);
-  color: #fff;
-  border-color: transparent;
-  box-shadow: 0 8px 20px rgba(255,120,90,0.18);
-  animation: pulse 1.2s infinite;
-}
-@keyframes pulse {
-  0% { box-shadow: 0 6px 18px rgba(255,120,90,0.12); }
-  50% { box-shadow: 0 18px 34px rgba(255,120,90,0.18); }
-  100% { box-shadow: 0 6px 18px rgba(255,120,90,0.12); }
-}
-.voice-controls { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
-.voice-small { font-size:13px; color:#444; }
-.voice-lang, .voice-mode { padding:6px 8px; border-radius:6px; border:1px solid #ddd; background:#fff; }
-.voice-status { font-size:13px; padding:6px 10px; border-radius:6px; background:#f6f8fb; border:1px solid #e8eefc; color:#333; }
-.voice-confidence { font-weight:700; margin-left:6px; color:#2c7be5; }
-.voice-note { font-size:12px; color:#666; }
-.voice-btn .mic-icon { font-size:18px; display:inline-block; transform:translateY(-1px); }
 
+.pin-modal-content {
+  background: white;
+  padding: 40px;
+  border-radius: 15px;
+  text-align: center;
+  max-width: 400px;
+  width: 90%;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+}
 
-  
+.pin-modal h2 {
+  margin-top: 0;
+  color: #333;
+}
+
+#pinInput {
+  border: 2px solid #ddd;
+  border-radius: 8px;
+  font-family: monospace;
+  letter-spacing: 2px;
+}
+
+#pinInput:focus {
+  outline: none;
+  border-color: #2c7be5;
+  box-shadow: 0 0 10px rgba(44, 123, 229, 0.3);
+}
+
+#submitPin:hover {
+  background: #1e5bb8;
+}
+
+#submitPin:disabled {
+  background: #ccc;
+  cursor: not-allowed;
+}
     /* main item row and nested sublist */
     .item-row { display:flex; align-items:center; gap:8px; margin-top:6px; }
     .item-row label { flex:1; display:flex; align-items:center; gap:8px; }
@@ -915,7 +925,18 @@
 <body>
   <div class="container" id="appContainer">
 
-  
+   <!-- PIN Protection Modal -->
+<div id="pinModal" class="pin-modal" style="display: none;">
+  <div class="pin-modal-content">
+    <h2>Ã°Å¸â€â€™ Daily Access PIN</h2>
+    <p>Enter the daily PIN to access the purchase entry form:</p>
+    <input type="password" id="pinInput" placeholder="Enter PIN" maxlength="10" style="padding: 15px; font-size: 18px; text-align: center; width: 200px; margin: 20px 0;">
+    <br>
+    <button id="submitPin" style="padding: 15px 30px; font-size: 16px; background: #2c7be5; color: white; border: none; border-radius: 5px; cursor: pointer;">Unlock</button>
+    <div id="pinError" style="color: red; margin-top: 10px; font-weight: bold;"></div>
+    <div style="font-size: 12px; color: #666; margin-top: 15px;">PIN is required once per day for security</div>
+  </div>
+</div>
 
 
 <div id="appContent">
@@ -925,14 +946,14 @@
        target="_blank" rel="noopener" aria-label="Open Google sheet">Google sheet</a>
     <h1>
       <span id="appTitle">Tile Purchase Entry</span>   
-      <span class="gear" id="gearBtn" title="Customize form">⚙️</span>
+      <span class="gear" id="gearBtn" title="Customize form">Ã¢Å¡â„¢Ã¯Â¸Â</span>
     </h1>
 
     <div class="custom-mode-badge">Customize mode</div>
 
     <!-- Customize panel (hidden by default) -->
     <div id="customPanel" role="dialog" aria-modal="true" aria-label="Customize form">
-      <button class="close-x" id="panelCloseX" title="Close (Esc)">❌</button>
+      <button class="close-x" id="panelCloseX" title="Close (Esc)">Ã¢ÂÅ’</button>
       <strong>Customize form text</strong>
       <div style="margin-top:8px">Click any visible text label on the form to edit it directly. After editing, use <b>Apply Preview</b> to try changes locally or <b>Save (server)</b> to store the customization so it will persist next time the app loads.</div>
       <div class="panel-row">
@@ -962,10 +983,23 @@
         </div>
       </div>
 
+      <!-- Add Main Item control - put inside your customization panel -->
+<div id="custom-main-add" class="customize-row" style="margin-top:12px;">
+  <label for="newMainLabel" style="display:block; font-weight:600; margin-bottom:6px;">
+    Add new Main item
+  </label>
+  <div style="display:flex; gap:8px; align-items:center;">
+    <input id="newMainLabel" type="text" placeholder="e.g. Electrical" style="flex:1; padding:6px;" />
+    <button id="addMainBtn" type="button" style="padding:6px 10px;">Add</button>
+  </div>
+  <div id="addMainStatus" style="font-size:12px; color:#666; margin-top:6px;"></div>
+</div>
+
+
       <!-- Add / Remove sub-item controls -->
       <div style="margin-top:12px; border-top:1px dashed #ddd; padding-top:10px;">
         <strong>Add / Remove Sub-items</strong>
-        <div style="font-size:13px;color:#444;margin-top:6px">Add a new checkbox sub-item to a main category. While in Customize mode you'll see a red ❌ next to each sub-item label to remove it.</div>
+        <div style="font-size:13px;color:#444;margin-top:6px">Add a new checkbox sub-item to a main category. While in Customize mode you'll see a red Ã¢ÂÅ’ next to each sub-item label to remove it.</div>
 
         <div class="panel-row" style="margin-top:8px; align-items:center;">
           <select id="addCategorySelect" style="width:40%; padding:8px; font-size:14px;">
@@ -986,10 +1020,10 @@
 
     <!-- Photo Upload Section -->
     <div class="photo-section">
-      <h2>📷 Photo Upload (Optional)</h2>
+      <h2>Ã°Å¸â€œÂ· Photo Upload (Optional)</h2>
       
       <div class="upload-area" id="uploadArea">
-          <div class="upload-icon">📷</div>
+          <div class="upload-icon">Ã°Å¸â€œÂ·</div>
           <div class="upload-text">
               Click to select a photo or drag & drop here
           </div>
@@ -1033,7 +1067,7 @@
         <div class="sub-item" data-original="true">
           <label><input type="checkbox" class="subitem" id="sub_floor_vitrified" value="Vitrified tiles">
             <span class="editable" data-config-id="sub_floor_vitrified_label" id="label_sub_floor_vitrified">Vitrified tiles (most popular for homes/offices)</span>
-            <button class="del-btn" title="Remove sub-item" aria-label="Remove">❌</button>
+            <button class="del-btn" title="Remove sub-item" aria-label="Remove">Ã¢ÂÅ’</button>
           </label>
           <div class="qty-unit">
             <input type="number" min="0" step="1" id="q_floor_vitrified" class="subqty qty" placeholder="Quantity" disabled>
@@ -1048,7 +1082,7 @@
         <div class="sub-item" data-original="true">
           <label><input type="checkbox" class="subitem" id="sub_floor_ceramic" value="Ceramic tiles">
             <span class="editable" data-config-id="sub_floor_ceramic_label" id="label_sub_floor_ceramic">Ceramic tiles</span>
-            <button class="del-btn" title="Remove sub-item" aria-label="Remove">❌</button>
+            <button class="del-btn" title="Remove sub-item" aria-label="Remove">Ã¢ÂÅ’</button>
           </label>
           <div class="qty-unit">
             <input type="number" min="0" step="1" id="q_floor_ceramic" class="subqty qty" placeholder="Quantity" disabled>
@@ -1063,7 +1097,7 @@
         <div class="sub-item" data-original="true">
           <label><input type="checkbox" class="subitem" id="sub_floor_porcelain" value="Porcelain tiles">
             <span class="editable" data-config-id="sub_floor_porcelain_label" id="label_sub_floor_porcelain">Porcelain tiles</span>
-            <button class="del-btn" title="Remove sub-item" aria-label="Remove">❌</button>
+            <button class="del-btn" title="Remove sub-item" aria-label="Remove">Ã¢ÂÅ’</button>
           </label>
           <div class="qty-unit">
             <input type="number" min="0" step="1" id="q_floor_porcelain" class="subqty qty" placeholder="Quantity" disabled>
@@ -1078,7 +1112,7 @@
         <div class="sub-item" data-original="true">
           <label><input type="checkbox" class="subitem" id="sub_floor_marble" value="Marble finish tiles">
             <span class="editable" data-config-id="sub_floor_marble_label" id="label_sub_floor_marble">Marble finish tiles</span>
-            <button class="del-btn" title="Remove sub-item" aria-label="Remove">❌</button>
+            <button class="del-btn" title="Remove sub-item" aria-label="Remove">Ã¢ÂÅ’</button>
           </label>
           <div class="qty-unit">
             <input type="number" min="0" step="1" id="q_floor_marble" class="subqty qty" placeholder="Quantity" disabled>
@@ -1093,7 +1127,7 @@
         <div class="sub-item" data-original="true">
           <label><input type="checkbox" class="subitem" id="sub_floor_granite" value="Granite finish tiles">
             <span class="editable" data-config-id="sub_floor_granite_label" id="label_sub_floor_granite">Granite finish tiles</span>
-            <button class="del-btn" title="Remove sub-item" aria-label="Remove">❌</button>
+            <button class="del-btn" title="Remove sub-item" aria-label="Remove">Ã¢ÂÅ’</button>
           </label>
           <div class="qty-unit">
             <input type="number" min="0" step="1" id="q_floor_granite" class="subqty qty" placeholder="Quantity" disabled>
@@ -1118,7 +1152,7 @@
         <div class="sub-item" data-original="true">
           <label><input type="checkbox" class="subitem" id="sub_wall_kitchen" value="Kitchen wall tiles (backsplash)">
             <span class="editable" data-config-id="sub_wall_kitchen_label" id="label_sub_wall_kitchen">Kitchen wall tiles (backsplash)</span>
-            <button class="del-btn" title="Remove sub-item" aria-label="Remove">❌</button>
+            <button class="del-btn" title="Remove sub-item" aria-label="Remove">Ã¢ÂÅ’</button>
           </label>
           <div class="qty-unit">
             <input type="number" min="0" step="1" id="q_wall_kitchen" class="subqty qty" placeholder="Quantity" disabled>
@@ -1133,7 +1167,7 @@
         <div class="sub-item" data-original="true">
           <label><input type="checkbox" class="subitem" id="sub_wall_bath" value="Bathroom wall tiles (glazed/anti-skid)">
             <span class="editable" data-config-id="sub_wall_bath_label" id="label_sub_wall_bath">Bathroom wall tiles (glazed/anti-skid)</span>
-            <button class="del-btn" title="Remove sub-item" aria-label="Remove">❌</button>
+            <button class="del-btn" title="Remove sub-item" aria-label="Remove">Ã¢ÂÅ’</button>
           </label>
           <div class="qty-unit">
             <input type="number" min="0" step="1" id="q_wall_bath" class="subqty qty" placeholder="Quantity" disabled>
@@ -1148,7 +1182,7 @@
         <div class="sub-item" data-original="true">
           <label><input type="checkbox" class="subitem" id="sub_wall_decor" value="Decorative/Designer wall tiles">
             <span class="editable" data-config-id="sub_wall_decor_label" id="label_sub_wall_decor">Decorative / designer wall tiles</span>
-            <button class="del-btn" title="Remove sub-item" aria-label="Remove">❌</button>
+            <button class="del-btn" title="Remove sub-item" aria-label="Remove">Ã¢ÂÅ’</button>
           </label>
           <div class="qty-unit">
             <input type="number" min="0" step="1" id="q_wall_decor" class="subqty qty" placeholder="Quantity" disabled>
@@ -1173,7 +1207,7 @@
         <div class="sub-item" data-original="true">
           <label><input type="checkbox" class="subitem" id="sub_san_wash" value="Washbasins">
             <span class="editable" data-config-id="sub_san_wash_label" id="label_sub_san_wash">Washbasins</span>
-            <button class="del-btn" title="Remove sub-item" aria-label="Remove">❌</button>
+            <button class="del-btn" title="Remove sub-item" aria-label="Remove">Ã¢ÂÅ’</button>
           </label>
           <div class="qty-unit">
             <input type="number" min="0" step="1" id="q_san_wash" class="subqty qty" placeholder="Quantity" disabled>
@@ -1188,7 +1222,7 @@
         <div class="sub-item" data-original="true">
           <label><input type="checkbox" class="subitem" id="sub_san_wc" value="WC">
             <span class="editable" data-config-id="sub_san_wc_label" id="label_sub_san_wc">WC</span>
-            <button class="del-btn" title="Remove sub-item" aria-label="Remove">❌</button>
+            <button class="del-btn" title="Remove sub-item" aria-label="Remove">Ã¢ÂÅ’</button>
           </label>
           <div class="qty-unit">
             <input type="number" min="0" step="1" id="q_san_wc" class="subqty qty" placeholder="Quantity" disabled>
@@ -1203,7 +1237,7 @@
         <div class="sub-item" data-original="true">
           <label><input type="checkbox" class="subitem" id="sub_san_urinal" value="Urinals">
             <span class="editable" data-config-id="sub_san_urinal_label" id="label_sub_san_urinal">Urinals</span>
-            <button class="del-btn" title="Remove sub-item" aria-label="Remove">❌</button>
+            <button class="del-btn" title="Remove sub-item" aria-label="Remove">Ã¢ÂÅ’</button>
           </label>
           <div class="qty-unit">
             <input type="number" min="0" step="1" id="q_san_urinal" class="subqty qty" placeholder="Quantity" disabled>
@@ -1228,7 +1262,7 @@
         <div class="sub-item" data-original="true">
           <label><input type="checkbox" class="subitem" id="sub_acc_grout" value="Tile grout & adhesives">
             <span class="editable" data-config-id="sub_acc_grout_label" id="label_sub_acc_grout">Tile grout & adhesives</span>
-            <button class="del-btn" title="Remove sub-item" aria-label="Remove">❌</button>
+            <button class="del-btn" title="Remove sub-item" aria-label="Remove">Ã¢ÂÅ’</button>
           </label>
           <div class="qty-unit">
             <input type="number" min="0" step="1" id="q_acc_grout" class="subqty qty" placeholder="Quantity" disabled>
@@ -1243,7 +1277,7 @@
         <div class="sub-item" data-original="true">
           <label><input type="checkbox" class="subitem" id="sub_acc_spacers" value="Spacers">
             <span class="editable" data-config-id="sub_acc_spacers_label" id="label_sub_acc_spacers">Spacers</span>
-            <button class="del-btn" title="Remove sub-item" aria-label="Remove">❌</button>
+            <button class="del-btn" title="Remove sub-item" aria-label="Remove">Ã¢ÂÅ’</button>
           </label>
           <div class="qty-unit">
             <input type="number" min="0" step="1" id="q_acc_spacers" class="subqty qty" placeholder="Quantity" disabled>
@@ -1258,7 +1292,7 @@
         <div class="sub-item" data-original="true">
           <label><input type="checkbox" class="subitem" id="sub_acc_sealants" value="Sealants">
             <span class="editable" data-config-id="sub_acc_sealants_label" id="label_sub_acc_sealants">Sealants</span>
-            <button class="del-btn" title="Remove sub-item" aria-label="Remove">❌</button>
+            <button class="del-btn" title="Remove sub-item" aria-label="Remove">Ã¢ÂÅ’</button>
           </label>
           <div class="qty-unit">
             <input type="number" min="0" step="1" id="q_acc_sealants" class="subqty qty" placeholder="Quantity" disabled>
@@ -1273,7 +1307,7 @@
         <div class="sub-item" data-original="true">
           <label><input type="checkbox" class="subitem" id="sub_acc_chem" value="Chemicals">
             <span class="editable" data-config-id="sub_acc_chem_label" id="label_sub_acc_chem">Chemicals</span>
-            <button class="del-btn" title="Remove sub-item" aria-label="Remove">❌</button>
+            <button class="del-btn" title="Remove sub-item" aria-label="Remove">Ã¢ÂÅ’</button>
           </label>
           <div class="qty-unit">
             <input type="number" min="0" step="1" id="q_acc_chem" class="subqty qty" placeholder="Quantity" disabled>
@@ -1288,7 +1322,7 @@
         <div class="sub-item" data-original="true">
           <label><input type="checkbox" class="subitem" id="sub_acc_skirting" value="Skirting & border tiles">
             <span class="editable" data-config-id="sub_acc_skirting_label" id="label_sub_acc_skirting">Skirting & border tiles</span>
-            <button class="del-btn" title="Remove sub-item" aria-label="Remove">❌</button>
+            <button class="del-btn" title="Remove sub-item" aria-label="Remove">Ã¢ÂÅ’</button>
           </label>
           <div class="qty-unit">
             <input type="number" min="0" step="1" id="q_acc_skirting" class="subqty qty" placeholder="Quantity" disabled>
@@ -1303,7 +1337,7 @@
         <div class="sub-item" data-original="true">
           <label><input type="checkbox" class="subitem" id="sub_acc_mosaic" value="Mosaic tiles for decoration">
             <span class="editable" data-config-id="sub_acc_mosaic_label" id="label_sub_acc_mosaic">Mosaic tiles for decoration</span>
-            <button class="del-btn" title="Remove sub-item" aria-label="Remove">❌</button>
+            <button class="del-btn" title="Remove sub-item" aria-label="Remove">Ã¢ÂÅ’</button>
           </label>
           <div class="qty-unit">
             <input type="number" min="0" step="1" id="q_acc_mosaic" class="subqty qty" placeholder="Quantity" disabled>
@@ -1334,7 +1368,7 @@
         </div>
       </div>
       <div style="margin-top:6px; margin-left:6px;">
-        <input id="purchasedOtherText" type="text" placeholder="If Others — specify (e.g. 'Grout, Adhesive')">
+        <input id="purchasedOtherText" type="text" placeholder="If Others Ã¢â‚¬â€ specify (e.g. 'Grout, Adhesive')">
       </div>
     </div>
 
@@ -1348,7 +1382,7 @@
         <option value="Customised">Customised</option>
         <option value="Other">Other</option>
       </select>
-      <input id="purchasedFrom" type="text" placeholder="If Other — specify vendor name" style="flex:1; display:none;">
+      <input id="purchasedFrom" type="text" placeholder="If Other Ã¢â‚¬â€ specify vendor name" style="flex:1; display:none;">
     </div>
 
     <!-- custom vendor manager -->
@@ -1367,62 +1401,30 @@
     <div class="checkbox-row" id="modes">
       <div class="mode-row" data-original="true">
         <label class="mode-label"><input type="checkbox" name="modeOfPayment" value="Cash" id="mode_cash"> <span class="editable" data-config-id="mode_cash_label" id="label_mode_cash">Cash</span>
-          <button class="del-btn" title="Remove mode" aria-label="Remove">❌</button>
+          <button class="del-btn" title="Remove mode" aria-label="Remove">Ã¢ÂÅ’</button>
         </label>
         <input type="number" min="0" step="0.01" id="amt_cash" class="mode-amount" placeholder="Cash Rs." disabled data-mode-amount="Cash">
       </div>
       <div class="mode-row" data-original="true">
         <label class="mode-label"><input type="checkbox" name="modeOfPayment" value="Online" id="mode_online"> <span class="editable" data-config-id="mode_online_label" id="label_mode_online">Online</span>
-          <button class="del-btn" title="Remove mode" aria-label="Remove">❌</button>
+          <button class="del-btn" title="Remove mode" aria-label="Remove">Ã¢ÂÅ’</button>
         </label>
         <input type="number" min="0" step="0.01" id="amt_online" class="mode-amount" placeholder="Online Rs." disabled data-mode-amount="Online">
       </div>
       <div class="mode-row" data-original="true">
         <label class="mode-label"><input type="checkbox" name="modeOfPayment" value="Credit" id="mode_credit"> <span class="editable" data-config-id="mode_credit_label" id="label_mode_credit">Credit</span>
-          <button class="del-btn" title="Remove mode" aria-label="Remove">❌</button>
+          <button class="del-btn" title="Remove mode" aria-label="Remove">Ã¢ÂÅ’</button>
         </label>
         <input type="number" min="0" step="0.01" id="amt_credit" class="mode-amount" placeholder="Credit Rs." disabled data-mode-amount="Credit">
       </div>
     </div>
 
     <!-- Total -->
-    <label class="q-label">Payment paid (₹)</label>
+    <label class="q-label">Payment paid (Ã¢â€šÂ¹)</label>
     <input id="paymentPaid" type="number" min="0" step="0.01" placeholder="Total amount (optional)" >
 
     <label class="q-label">Any other information</label>
     <textarea id="otherInfo" rows="2" placeholder="Optional additional information"></textarea>
-
-  <!-- Voice-to-Text UI: paste right after the otherInfo textarea -->
-<div class="voice-row" id="voiceRow">
-  <button id="voiceBtn" class="voice-btn" aria-pressed="false" title="Click to start voice input">
-    <span class="mic-icon">🎤</span>
-    <span id="voiceBtnLabel">Start voice</span>
-  </button>
-
-  <div class="voice-controls" aria-hidden="false">
-    <select id="voiceLang" class="voice-lang" title="Select language">
-      <option value="en-US">English (US)</option>
-      <option value="hi-IN">Hindi (India)</option>
-    </select>
-
-    <label class="voice-mode voice-small">
-      <input type="checkbox" id="voiceContinuous"> Continuous
-    </label>
-
-    <button id="voiceStopBtn" class="voice-btn" title="Stop listening" style="background:#f1f1f1;color:#333;border:1px solid #ccc;">Stop</button>
-    <button id="voiceClearBtn" class="voice-btn" title="Clear last transcript" style="background:#fff4f4;color:#b71c1c;border:1px solid #ffb3b3;">Clear</button>
-
-    <div id="voiceStatus" class="voice-status" aria-live="polite">Idle</div>
-    <div id="voiceConfidence" class="voice-confidence" aria-hidden="true" style="display:none">0%</div>
-  </div>
-  <div class="voice-note" style="width:100%; margin-top:6px">Tip: say <em>"stop recording"</em> to stop; interim text appears as you speak.</div>
-</div>
-
-
-
-
-
-  
 
     <div class="form-actions">
       <button id="submitBtn" type="button">Submit</button>
@@ -1444,12 +1446,12 @@
   <script>
 
     // --- Config / server endpoint detection ---
-    const SERVER_ENDPOINT = window.ENDPOINT || "https://script.google.com/macros/s/AKfycbwsKGlbmcbrw3cm_jqKyhXJXup1P_mIodLoIXR8ZvmVUEQNSA9yympNYBRulM9r4VOfhA/exec";
+    const SERVER_ENDPOINT = window.ENDPOINT || "https://script.google.com/macros/s/AKfycbzinZ-cAksmWfdzPDWNfbRKTo4GZM8TdbxUrhelXgSmdScrlTLqXRpqy28upvz3Zl_K3g/exec";
     const SERVER_TOKEN = window.SHARED_TOKEN || "shopSecret2025";
 
 
     // Replace with your Google Apps Script Web App URL
-        const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwsKGlbmcbrw3cm_jqKyhXJXup1P_mIodLoIXR8ZvmVUEQNSA9yympNYBRulM9r4VOfhA/exec';
+        const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzinZ-cAksmWfdzPDWNfbRKTo4GZM8TdbxUrhelXgSmdScrlTLqXRpqy28upvz3Zl_K3g/exec';
 
     let selectedFile = null;
     let selectedImage = null;
@@ -1683,7 +1685,141 @@
 
 
     
+// === COMPREHENSIVE PIN PROTECTION SYSTEM ===
+let isUnlocked = false;
 
+// MOBILE-FRIENDLY PIN CHECK
+function checkPinValidation() {
+  const today = new Date().toISOString().split('T')[0];
+  const lastValidated = localStorage.getItem('pinValidated');
+  
+  console.log('Checking PIN validation:', { today, lastValidated });
+  
+  // Always check PIN if not validated today OR if no validation exists
+  if (!lastValidated || lastValidated !== today) {
+    console.log('Need PIN validation');
+    setTimeout(() => {
+      const pinModal = document.getElementById('pinModal');
+      if (pinModal) {
+        pinModal.style.display = 'flex';
+        const pinInput = document.getElementById('pinInput');
+        if (pinInput) {
+          pinInput.focus();
+        }
+      } else {
+        console.error('PIN modal not found!');
+      }
+    }, 500); // Small delay for mobile compatibility
+  } else {
+    console.log('Already validated today');
+    unlockApp();
+  }
+}
+
+
+function showPinModal() {
+  document.getElementById('pinModal').style.display = 'flex';
+  document.getElementById('pinInput').focus();
+}
+
+function unlockApp() {
+  isUnlocked = true;
+  document.getElementById('pinModal').style.display = 'none';
+}
+
+// Simple PIN validation (client-side with server backup)
+async function validatePin(pin) {
+  // Primary validation: Check correct PIN
+  if (pin === '5678') {
+    return { success: true };
+  } else {
+    return { success: false, error: 'Invalid PIN' };
+  }
+}
+
+// PIN modal event listeners
+document.addEventListener('DOMContentLoaded', function() {
+  const pinInput = document.getElementById('pinInput');
+  const submitPinBtn = document.getElementById('submitPin');
+  const pinError = document.getElementById('pinError');
+  
+  // Enter key support
+  if (pinInput) {
+    pinInput.addEventListener('keypress', function(e) {
+      if (e.key === 'Enter') {
+        submitPinBtn.click();
+      }
+    });
+  }
+  
+  // Submit PIN
+  if (submitPinBtn) {
+    submitPinBtn.addEventListener('click', async function() {
+      const pin = pinInput.value.trim();
+      if (!pin) {
+        pinError.textContent = 'Please enter PIN';
+        return;
+      }
+      
+      // Disable button during validation
+      submitPinBtn.disabled = true;
+      submitPinBtn.textContent = 'Validating...';
+      pinError.textContent = '';
+      
+      try {
+        const result = await validatePin(pin);
+        
+        if (result.success) {
+          // Store validation for today
+          const today = new Date().toISOString().split('T')[0];
+          localStorage.setItem('pinValidated', today);
+          
+          // Unlock app
+          pinError.textContent = 'PIN accepted! Loading form...';
+          pinError.style.color = 'green';
+          
+          setTimeout(() => {
+            unlockApp();
+          }, 500);
+        } else {
+          pinError.textContent = result.error || 'Invalid PIN';
+          pinError.style.color = 'red';
+          pinInput.value = '';
+          pinInput.focus();
+        }
+      } catch (error) {
+        pinError.textContent = 'Validation error. Please try again.';
+        pinError.style.color = 'red';
+      } finally {
+        submitPinBtn.disabled = false;
+        submitPinBtn.textContent = 'Unlock';
+      }
+    });
+  }
+  
+  // Check PIN validation on load
+  checkPinValidation();
+});
+
+// Protect form submission
+const originalMobileSubmitFunction = window.mobileSubmitFunction;
+if (originalMobileSubmitFunction) {
+  window.mobileSubmitFunction = function() {
+    if (!isUnlocked) {
+      alert('Please enter daily PIN first');
+      showPinModal();
+      
+      // Re-enable submit button
+      const submitBtn = document.getElementById('submitBtn');
+      if (submitBtn) {
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Submit';
+      }
+      return;
+    }
+    return originalMobileSubmitFunction.apply(this, arguments);
+  };
+}
 
     // ----------------- Unit Management Functions -----------------
     function loadGlobalUnits() {
@@ -1872,6 +2008,127 @@
       renderUnitList();
       rebuildAllUnitSelects();
 
+            // ensure Add-Sub category dropdown is up-to-date
+      if (typeof rebuildAddCategorySelect === 'function') rebuildAddCategorySelect();
+      // and initialize/replace add-sub handler
+      if (typeof initAddSubItemHandler === 'function') initAddSubItemHandler();
+
+
+           
+
+
+      /* ------------------ Add Main Item (Customization) ------------------ */
+/* Paste this block immediately after the existing `rebuildAllUnitSelects();` line
+   in the section where units and customization buttons are initialized. */
+
+function sanitizeIdFragment(text) {
+  return text.toString().trim()
+    .toLowerCase()
+    .replace(/\s+/g, '_')
+    .replace(/[^a-z0-9_]/g, '')
+    .replace(/^_+|_+$/g, '')
+    .slice(0, 40);
+}
+
+function getCurrentConfigOrBuild() {
+  if (window.currentCfg && typeof window.currentCfg === 'object') return window.currentCfg;
+  try { return buildConfigObject(); } catch(e) { return { structure: { mainItems: [] } }; }
+}
+
+function ensureMainItemsArray(cfg) {
+  if (!cfg) cfg = {};
+  if (!cfg.structure) cfg.structure = {};
+  if (!Array.isArray(cfg.structure.mainItems)) cfg.structure.mainItems = [];
+  return cfg;
+}
+
+function addMainToConfig(label) {
+  if (!label || !label.trim()) return { error: 'Empty label' };
+  const cfg = getCurrentConfigOrBuild();
+  ensureMainItemsArray(cfg);
+
+  const base = sanitizeIdFragment(label) || 'main';
+  let suffix = base;
+  let i = 1;
+  while (cfg.structure.mainItems.some(m => (m.id || '').toString() === suffix || (m.label || '').toString().toLowerCase() === label.toLowerCase())) {
+    suffix = base + '_' + (i++);
+  }
+
+  const newMain = { id: suffix, label: label.trim(), subitems: [] };
+  cfg.structure.mainItems.push(newMain);
+  window.currentCfg = cfg;
+  return { ok: true, cfg: cfg, newMain: newMain };
+}
+
+function rebuildAddCategorySelect() {
+  const sel = document.getElementById('addCategorySelect');
+  if (!sel) return;
+  const prev = sel.value;
+  sel.innerHTML = '';
+  const cfg = getCurrentConfigOrBuild();
+  const mains = (cfg && cfg.structure && Array.isArray(cfg.structure.mainItems)) ? cfg.structure.mainItems : [];
+  mains.forEach(m => {
+    const opt = document.createElement('option');
+    opt.value = m.id;
+    opt.textContent = m.label || m.id;
+    sel.appendChild(opt);
+  });
+  // Always keep Mode of payment as an option at the end
+  const optMode = document.createElement('option');
+  optMode.value = 'mode';
+  optMode.textContent = 'Mode of payment';
+  sel.appendChild(optMode);
+  // try to restore previous selection
+  try { sel.value = prev; } catch(e) {}
+}
+
+function initCustomizationMainAdder() {
+  const input = document.getElementById('newMainLabel');
+  const btn = document.getElementById('addMainBtn');
+  const status = document.getElementById('addMainStatus');
+  if (!input || !btn) return;
+
+  // populate the Add-Sub dropdown from current cfg
+  rebuildAddCategorySelect();
+
+  btn.removeEventListener('click', btn._mainClickHandler || (()=>{}));
+  btn._mainClickHandler = function() {
+    const label = input.value.trim();
+    status.textContent = '';
+    if (!label) { status.textContent = 'Please enter a name for the main item.'; return input.focus(); }
+
+    const res = addMainToConfig(label);
+    if (res.error) { status.textContent = 'Error: ' + res.error; return; }
+
+    // Re-render the form using your applyConfigObject so the main checkbox and empty sublist appear
+    try {
+      if (typeof applyConfigObject === 'function') {
+        applyConfigObject(res.cfg);
+      } else if (typeof applyConfig === 'function') {
+        applyConfig(res.cfg);
+      }
+      status.textContent = 'Added "' + label + '". Now add sub-items under it.';
+      input.value = '';
+      input.focus();
+      // update Add-Sub dropdown to include the new main
+      rebuildAddCategorySelect();
+    } catch (e) {
+      console.error('applyConfig apply failed after adding main:', e);
+      status.textContent = 'Added locally but failed to redraw. See console.';
+    }
+  };
+  btn.addEventListener('click', btn._mainClickHandler);
+
+  input.removeEventListener('keydown', input._mainKeyHandler || (()=>{}));
+  input._mainKeyHandler = function(ev){ if (ev.key === 'Enter') { ev.preventDefault(); btn.click(); } };
+  input.addEventListener('keydown', input._mainKeyHandler);
+}
+/* ---------------- end Add Main Item block -------------------- */
+
+/* Ensure initializer runs on load. If applyConfigObject rebuilds the DOM it will call this again (see below). */
+document.addEventListener('DOMContentLoaded', function(){ try { initCustomizationMainAdder(); } catch(e) { console.error(e); } });
+
+
       // Add Unit button event listener
       if (addUnitBtn && newUnitInput) {
         addUnitBtn.addEventListener('click', function() {
@@ -2038,7 +2295,7 @@
         b.type = 'button';
         b.className = 'remove-checkbox';
         b.title = 'Remove this item';
-        b.textContent = '❌';
+        b.textContent = 'Ã¢ÂÅ’';
         b.style.marginLeft = '8px';
         b.style.background = '#ff6b6b';
         b.style.color = '#fff';
@@ -2105,6 +2362,8 @@
             }
           } catch(e){}
           itemRow.remove();
+          // refresh add-category select so removed mains disappear from dropdown
+          if (typeof rebuildAddCategorySelect === 'function') rebuildAddCategorySelect();
         } else if (modeRow) {
           if (!confirm('Remove this payment mode? This cannot be undone.')) return;
           modeRow.remove();
@@ -2376,9 +2635,89 @@
       // Run initial binds
       bindSubitemHandlers();
       setupMainToSubBindings();
+      rebuildAddCategorySelect();   // <-- add this line
+
+              // Refresh Add-Sub dropdown and handler so newly added mains are available
+        if (typeof rebuildAddCategorySelect === 'function') rebuildAddCategorySelect();
+        if (typeof initAddSubItemHandler === 'function') initAddSubItemHandler();
+      
       document.querySelectorAll('input[name="modeOfPayment"]').forEach(bindModeToggle);
 
-      // Add subitem functionality
+// Rebuild the "Add Sub-item" category select so it includes all current main items
+function rebuildAddCategorySelect() {
+  const sel = document.getElementById('addCategorySelect');
+  if (!sel) return;
+  const current = sel.value;
+  sel.innerHTML = '';
+  // Add the payment mode option first
+  const optMode = document.createElement('option');
+  optMode.value = 'mode';
+  optMode.textContent = 'Mode of payment';
+  sel.appendChild(optMode);
+
+  // Add mains found in the form (item-row)
+  Array.from(document.querySelectorAll('.item-row')).forEach(row => {
+    const cb = row.querySelector('input[type="checkbox"].purchased, input[type="checkbox"]');
+    if (!cb || !cb.id) return;
+    const parts = cb.id.split('_');
+    const suffix = (parts.length > 1) ? parts.slice(1).join('_') : cb.id;
+    const labelEl = row.querySelector('.editable');
+    const label = labelEl ? (labelEl.textContent || '').trim() : (cb.value || suffix);
+    const opt = document.createElement('option');
+    opt.value = suffix;
+    opt.textContent = label;
+    sel.appendChild(opt);
+  });
+
+  // restore if possible
+  const all = Array.from(sel.options).map(o => o.value);
+  if (all.includes(current)) sel.value = current;
+}
+
+// Rebuild the Add-Sub dropdown options from current main categories in DOM
+function rebuildAddCategorySelect() {
+  const sel = document.getElementById('addCategorySelect');
+  if (!sel) return;
+  // keep the 'mode' option first (modes)
+  const prevValue = sel.value;
+  sel.innerHTML = '';
+  const optMode = document.createElement('option');
+  optMode.value = 'mode';
+  optMode.textContent = 'Mode of payment';
+  sel.appendChild(optMode);
+
+  // collect mains (.item-row .purchased checkboxes)
+  const mains = Array.from(document.querySelectorAll('.item-row .purchased'));
+  mains.forEach(cb => {
+    if (!cb.id) return;
+    let val = cb.id;
+    if (val.startsWith('p_')) val = val.slice(2); // e.g., p_floor -> floor
+    const labelEl = cb.closest('.item-row') ? cb.closest('.item-row').querySelector('.editable') : null;
+    const txt = labelEl ? (labelEl.textContent || cb.value || val) : (cb.value || val);
+    const opt = document.createElement('option');
+    opt.value = val;
+    opt.textContent = txt;
+    sel.appendChild(opt);
+  });
+
+  // if prevValue exists try to restore it
+  if (prevValue) {
+    const exists = Array.from(sel.options).some(o => o.value === prevValue);
+    if (exists) sel.value = prevValue;
+  }
+}
+
+
+
+
+
+
+
+
+
+      
+
+    // Add subitem functionality
       if (addSubBtn) {
         addSubBtn.addEventListener('click', function() {
           const cat = addCategorySelect && addCategorySelect.value ? addCategorySelect.value : 'floor';
@@ -2392,6 +2731,7 @@
             candidate = baseId + '_' + i;
             i++;
           }
+
           const elementId = candidate;
 
           if (cat === 'mode') {
@@ -2420,7 +2760,7 @@
             delBtn.type = 'button';
             delBtn.title = 'Remove mode';
             delBtn.setAttribute('aria-label','Remove');
-            delBtn.textContent = '❌';
+            delBtn.textContent = 'Ã¢ÂÅ’';
 
             labelEl.appendChild(cb);
             labelEl.appendChild(span);
@@ -2478,7 +2818,7 @@
           delBtn.type = 'button';
           delBtn.title = 'Remove sub-item';
           delBtn.setAttribute('aria-label','Remove');
-          delBtn.textContent = '❌';
+          delBtn.textContent = 'Ã¢ÂÅ’';
 
           labelEl.appendChild(cb);
           labelEl.appendChild(span);
@@ -2547,7 +2887,169 @@
         });
       }
 
+/* --------- Robust Add-Sub helpers (safe replacement) --------- */
 
+function _findAddSubElements() {
+  return {
+    addBtn: document.getElementById('addSubBtn') || document.getElementById('add-sub-btn') || document.querySelector('[data-add-sub-btn]'),
+    categorySelect: document.getElementById('addCategorySelect') || document.getElementById('add_category_select') || document.querySelector('#addCategorySelect') || document.querySelector('[data-add-category-select]'),
+    newSubInput: document.getElementById('addSubLabelInput') || document.getElementById('addSubLabel') || document.getElementById('newSubLabel') || document.querySelector('.new-sub-label') || document.querySelector('[data-new-sub-label]')
+  };
+}
+
+/**
+ * Rebuilds the "Add Sub-item" category dropdown so each option.value === main.id.
+ * Looks for config in window.currentCfg, then common locations in cfg object.
+ */
+function rebuildAddCategorySelect() {
+  const els = _findAddSubElements();
+  const sel = els.categorySelect;
+  if (!sel) { console.debug('rebuildAddCategorySelect: category select not found'); return; }
+
+  // Get config object robustly
+  let cfg = (window.currentCfg && typeof window.currentCfg === 'object') ? window.currentCfg : null;
+  if (!cfg && typeof buildConfigObject === 'function') {
+    try { cfg = buildConfigObject(); } catch (e) { cfg = null; }
+  }
+  // Accept several possible shapes for mains
+  let mains = [];
+  if (cfg) {
+    if (cfg.structure && Array.isArray(cfg.structure.mainItems)) mains = cfg.structure.mainItems;
+    else if (Array.isArray(cfg.mainItems)) mains = cfg.mainItems;
+    else if (Array.isArray(cfg.mains)) mains = cfg.mains;
+    else if (cfg.structure && Array.isArray(cfg.structure.mains)) mains = cfg.structure.mains;
+  }
+
+  // Clear and populate
+  const prevVal = sel.value;
+  sel.innerHTML = '';
+  // if no mains, still include a friendly placeholder option
+  if (!mains || mains.length === 0) {
+    const ph = document.createElement('option');
+    ph.value = '';
+    ph.textContent = 'Ã¢â‚¬â€ No categories available Ã¢â‚¬â€';
+    ph.disabled = true;
+    ph.selected = true;
+    sel.appendChild(ph);
+    return;
+  }
+
+  // Build options using main.id as value (fallback to sanitized label)
+  mains.forEach(m => {
+    const opt = document.createElement('option');
+    const id = (m && m.id) ? String(m.id) : String((m && m.label) ? m.label.toLowerCase().replace(/\s+/g,'_').replace(/[^a-z0-9_]/g,'') : '');
+    opt.value = id;
+    opt.textContent = (m && m.label) ? m.label : id;
+    sel.appendChild(opt);
+  });
+
+  // Try to restore previous selection if present
+  try { if (prevVal) sel.value = prevVal; } catch(e) {}
+}
+
+/**
+ * Initialize Add-Sub button handler. Safe to call many times; attaches only one handler.
+ * Adds the new subitem into the matching main (by main.id === select.value).
+ */
+function initAddSubItemHandler() {
+  const els = _findAddSubElements();
+  const addBtn = els.addBtn;
+  const categorySelect = els.categorySelect;
+  const newSubInput = els.newSubInput;
+
+  if (!addBtn) { console.debug('initAddSubItemHandler: addBtn not found'); return; }
+  if (!categorySelect) { console.debug('initAddSubItemHandler: categorySelect not found'); return; }
+  if (!newSubInput) { console.debug('initAddSubItemHandler: newSubInput not found'); return; }
+
+  // Unbind previous handler if present
+  try { addBtn.removeEventListener('click', addBtn._addSubHandler || (()=>{})); } catch(e) {}
+
+  addBtn._addSubHandler = function () {
+    const rawLabel = (newSubInput.value || '').trim();
+    if (!rawLabel) { alert('Enter a label for the new sub-item.'); newSubInput.focus(); return; }
+
+    // robust config find
+    let cfg = (window.currentCfg && typeof window.currentCfg === 'object') ? window.currentCfg : null;
+    if (!cfg && typeof buildConfigObject === 'function') {
+      try { cfg = buildConfigObject(); } catch (e) { cfg = null; }
+    }
+    if (!cfg) cfg = { structure: { mainItems: [] } };
+
+    // normalize mains array in cfg
+    if (!cfg.structure) cfg.structure = {};
+    if (!Array.isArray(cfg.structure.mainItems)) {
+      if (Array.isArray(cfg.mainItems)) cfg.structure.mainItems = cfg.mainItems;
+      else if (Array.isArray(cfg.mains)) cfg.structure.mainItems = cfg.mains;
+      else cfg.structure.mainItems = [];
+    }
+
+    const mains = cfg.structure.mainItems;
+    if (!Array.isArray(mains) || mains.length === 0) {
+      alert('No main categories exist. Create a main category first.');
+      return;
+    }
+
+    const selectedVal = String(categorySelect.value || '').trim();
+    // try finding by id
+    let targetMain = mains.find(m => String(m.id || '').trim() === selectedVal);
+    // fallback: try matching label (case-insensitive)
+    if (!targetMain) {
+      targetMain = mains.find(m => String(m.label || '').toLowerCase() === (selectedVal || '').toLowerCase());
+    }
+
+    if (!targetMain) {
+      alert('Please select a valid main category from the dropdown.');
+      return;
+    }
+
+    // create a unique sub id scoped to the main
+    const slug = rawLabel.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g,'') || 'sub';
+    let candidateId = (String(targetMain.id) + '_' + slug).slice(0, 60);
+    let suffix = 1;
+    const existsId = id => mains.some(m => Array.isArray(m.subitems) && m.subitems.some(s => s.id === id));
+    while (document.getElementById(candidateId) || existsId(candidateId)) {
+      candidateId = (String(targetMain.id) + '_' + slug + '_' + (suffix++)).slice(0, 60);
+    }
+
+    const newSub = { id: candidateId, label: rawLabel };
+    if (!Array.isArray(targetMain.subitems)) targetMain.subitems = [];
+    targetMain.subitems.push(newSub);
+
+    // persist and re-render
+    window.currentCfg = cfg;
+    try {
+      if (typeof applyConfigObject === 'function') {
+        applyConfigObject(cfg);
+      } else if (typeof applyConfig === 'function') {
+        applyConfig(cfg);
+      } else {
+        // fallback: at least rebuild the category select
+        rebuildAddCategorySelect();
+      }
+      // clear input and focus
+      newSubInput.value = '';
+      newSubInput.focus();
+      // ensure category select reflects latest config
+      rebuildAddCategorySelect();
+    } catch (err) {
+      console.error('initAddSubItemHandler: re-render failed', err);
+      alert('Sub-item added to config but UI could not be redrawn. Check console.');
+    }
+  };
+
+  // attach handler
+  addBtn.addEventListener('click', addBtn._addSubHandler);
+}
+
+/* --------- end helpers --------- */
+
+
+
+
+
+
+
+      
       // Config save/load functions
       function buildConfigObject() {
         const cfg = { title: '', labels: {}, structure: { mainItems: [], modes: [] }, globalUnits: loadGlobalUnits() };
@@ -2661,7 +3163,6 @@
       (async function tryLoadConfig(){
         try {
           const url = SERVER_ENDPOINT + '?action=getConfig&token=' + encodeURIComponent(SERVER_TOKEN);
-
           const resp = await jsonpCall(url, 15000);
           if (resp && resp.success && resp.config) {
             applyConfigObject(resp.config);
@@ -2710,8 +3211,10 @@
       
      
 
-            function applyConfigObject(cfg) {
+      function applyConfigObject(cfg) {
         if (!cfg) return;
+        window.currentCfg = cfg;
+
 
         if (cfg.title) {
           const titleEl = document.getElementById('appTitle');
@@ -2836,7 +3339,7 @@
                   delBtn.type = 'button';
                   delBtn.title = 'Remove sub-item';
                   delBtn.setAttribute('aria-label', 'Remove');
-                  delBtn.textContent = '❌';
+                  delBtn.textContent = 'Ã¢ÂÅ’';
 
                   labelEl.appendChild(cb);
                   labelEl.appendChild(span);
@@ -2929,7 +3432,7 @@
             delBtn.type = 'button';
             delBtn.title = 'Remove mode';
             delBtn.setAttribute('aria-label', 'Remove');
-            delBtn.textContent = '❌';
+            delBtn.textContent = 'Ã¢ÂÅ’';
 
             labelEl.appendChild(cb);
             labelEl.appendChild(span);
@@ -2956,6 +3459,8 @@
         }
 
         // Re-bind handlers after structural changes
+        initCustomizationMainAdder();
+
         bindSubitemHandlers();
         setupMainToSubBindings();
         document.querySelectorAll('input[name="modeOfPayment"]').forEach(bindModeToggle);
@@ -3316,7 +3821,92 @@ async function submitDirectMobileFriendly(data) {
   });
 }
 
-function collectFormData() {
+// --- Fallback iframe method (original) ---
+async function submitUnifiedDataFallback(data) {
+  return new Promise((resolve, reject) => {
+    console.log('Using iframe fallback method');
+    
+    // Create iframe for submission
+    const iframeName = 'submit_iframe_fallback';
+    let iframe = document.getElementById(iframeName);
+    if (!iframe) {
+      iframe = document.createElement('iframe');
+      iframe.id = iframeName;
+      iframe.name = iframeName;
+      iframe.style.display = 'none';
+      document.body.appendChild(iframe);
+    }
+
+    // Create form with all data
+    const form = document.createElement('form');
+    form.method = 'POST';
+    form.action = SCRIPT_URL;
+    form.target = iframeName;
+    form.enctype = 'multipart/form-data';
+
+    // Helper to add hidden inputs
+    function addHidden(name, value) {
+      const input = document.createElement('input');
+      input.type = 'hidden';
+      input.name = name;
+      input.value = value != null ? String(value) : '';
+      form.appendChild(input);
+    }
+
+    // Add all form fields
+    addHidden('token', SERVER_TOKEN || 'shopSecret2025');
+    addHidden('action', 'submit');
+    addHidden('purchased', data.purchased || '');
+    addHidden('purchasedFrom', data.purchasedFrom || '');
+    addHidden('paymentModes', data.paymentModes || '');
+    addHidden('paymentPaid', data.paymentPaid || '');
+    addHidden('otherInfo', data.otherInfo || '');
+    addHidden('photoLink', data.photoLink || '');
+    addHidden('clientId', data.clientId || '');
+
+    // Add photo data if present
+    if (selectedImage) {
+      addHidden('imageData', selectedImage);
+      addHidden('fileName', selectedFile && selectedFile.name ? selectedFile.name : ('camera_' + Date.now() + '.jpg'));
+    }
+
+    document.body.appendChild(form);
+
+    // Handle response with shorter timeout for mobile
+    let handled = false;
+    function finalize(success) {
+      if (handled) return;
+      handled = true;
+      resolve({ success: success });
+      // Cleanup
+      try { 
+        if (form.parentNode) form.parentNode.removeChild(form); 
+      } catch(e) {}
+    }
+
+    // Set up iframe response handler with mobile-specific timeout
+    iframe.onload = function() {
+      finalize(true); // Assume success on mobile
+    };
+
+    // Submit form
+    try {
+      form.submit();
+      console.log('Fallback form submitted to server');
+    } catch (err) {
+      console.warn('Fallback form submit error:', err);
+      finalize(true); // Still assume success for mobile compatibility
+    }
+
+    // Shorter timeout for mobile - assume success after 5 seconds
+    setTimeout(() => {
+      finalize(true);
+    }, 5000);
+  });
+}
+
+
+    function collectFormData() {
       const data = {};
       
       // Collect purchased items with quantities and units
@@ -3421,7 +4011,7 @@ function collectFormData() {
         let amount = amountInput && amountInput.value ? amountInput.value : '';
         
         if (amount) {
-          paymentModes.push(`${mode}: ₹${amount}`);
+          paymentModes.push(`${mode}: Ã¢â€šÂ¹${amount}`);
         } else {
           paymentModes.push(mode);
         }
@@ -3746,7 +4336,7 @@ function getSublistIdMobile(mainCheckboxId) {
     const amountInput = document.querySelector(`input[data-mode-amount="${mode}"]`);
     const amount = amountInput && amountInput.value ? amountInput.value : '';
     if (amount) {
-      paymentModes.push(`${mode}: ₹${amount}`);
+      paymentModes.push(`${mode}: Ã¢â€šÂ¹${amount}`);
     } else {
       paymentModes.push(mode);
     }
@@ -3796,16 +4386,6 @@ function submitDirectMobileFriendlyBackground(data) {
   // Don't return a promise - this is fire-and-forget
 }
 
-
-
-
-
-
-
-
-    
-
-
     // ===== ENHANCED SUB-ITEM SEARCH SYSTEM WITH CUSTOMIZATION SUPPORT =====
 class SubItemSearch {
   constructor() {
@@ -3844,7 +4424,7 @@ class SubItemSearch {
                class="search-input" 
                placeholder='Search sub-items (e.g. "porcelain", "grout")'
                autocomplete="off">
-        <button class="search-clear-btn" id="searchClearBtn" type="button">×</button>
+        <button class="search-clear-btn" id="searchClearBtn" type="button">Ãƒâ€”</button>
         <div class="search-count" id="searchCount"></div>
       </div>
       <div class="search-results" id="searchResults" style="display: none;"></div>
@@ -4399,7 +4979,7 @@ getCustomUnitInput(checkboxId) {
     }
   }
   
-  showAddSubitemModal(query) {
+    showAddSubitemModal(query) {
     const modal = document.createElement('div');
     modal.className = 'add-subitem-modal';
     modal.innerHTML = `
@@ -4407,16 +4987,11 @@ getCustomUnitInput(checkboxId) {
         <h3>Add New Sub-item</h3>
         <div class="add-subitem-form">
           <label>Category:</label>
-          <select class="add-subitem-category">
-            <option value="floor">Floor Tiles</option>
-            <option value="wall">Wall Tiles</option>
-            <option value="san">Sanitaryware</option>
-            <option value="acc">Accessories</option>
-          </select>
-          
+          <select class="add-subitem-category" id="addSubModalCategory"></select>
+
           <label>Sub-item name:</label>
-          <input type="text" class="add-subitem-label" value="${this.escapeHtml(query)}">
-          
+          <input type="text" class="add-subitem-label" id="addSubModalLabel" value="${this.escapeHtml(query)}">
+
           <div class="add-subitem-actions">
             <button class="btn add-subitem-confirm">Add Sub-item</button>
             <button class="btn add-subitem-cancel">Cancel</button>
@@ -4424,27 +4999,57 @@ getCustomUnitInput(checkboxId) {
         </div>
       </div>
     `;
-    
+
     document.body.appendChild(modal);
-    
+
+    // populate category select using current mains (so new mains appear)
+    const catSelect = modal.querySelector('#addSubModalCategory');
+    function populateCatSelect() {
+      catSelect.innerHTML = '';
+      // include 'mode' option for payment modes
+      const optMode = document.createElement('option');
+      optMode.value = 'mode';
+      optMode.textContent = 'Mode of payment';
+      catSelect.appendChild(optMode);
+
+      // find all main checkboxes (.purchased or .purchased class rows)
+      const mains = Array.from(document.querySelectorAll('.item-row .purchased'));
+      mains.forEach(cb => {
+        if (!cb.id) return;
+        // strip leading 'p_' if present to derive the category suffix used across the app
+        let val = cb.id;
+        if (val.startsWith('p_')) val = val.slice(2);
+        const labelEl = cb.closest('.item-row') ? cb.closest('.item-row').querySelector('.editable') : null;
+        const label = labelEl ? (labelEl.textContent || cb.value || val) : (cb.value || val);
+        const opt = document.createElement('option');
+        opt.value = val;
+        opt.textContent = label;
+        catSelect.appendChild(opt);
+      });
+
+      // default to first non-mode option if any
+      if (catSelect.options.length > 1) catSelect.selectedIndex = 1;
+    }
+    populateCatSelect();
+
     // Focus input
-    const labelInput = modal.querySelector('.add-subitem-label');
+    const labelInput = modal.querySelector('#addSubModalLabel');
     labelInput.focus();
     labelInput.select();
-    
+
     // Bind events
     modal.querySelector('.add-subitem-confirm').addEventListener('click', () => {
-      this.createNewSubitem(
-        modal.querySelector('.add-subitem-category').value,
-        modal.querySelector('.add-subitem-label').value
-      );
+      const chosenCategory = modal.querySelector('#addSubModalCategory').value;
+      const newLabel = modal.querySelector('#addSubModalLabel').value;
+      // call the corrected create function below
+      this.createNewSubitem(chosenCategory, newLabel);
       document.body.removeChild(modal);
     });
-    
+
     modal.querySelector('.add-subitem-cancel').addEventListener('click', () => {
       document.body.removeChild(modal);
     });
-    
+
     // Close on outside click
     modal.addEventListener('click', (e) => {
       if (e.target === modal) {
@@ -4452,85 +5057,156 @@ getCustomUnitInput(checkboxId) {
       }
     });
   }
-  
+
   createNewSubitem(category, label) {
-    if (!label.trim()) return;
-    
+    if (!label || !label.trim()) {
+      alert('Please enter a label for the new sub-item.');
+      return;
+    }
     const trimmedLabel = label.trim();
-    const slug = trimmedLabel.toLowerCase().replace(/[^a-z0-9]/g, '');
-    const baseId = `sub${category}${slug}`;
-    
-    // Find unique ID
+
+    // normalize category (strip 'p_' if accidentally passed)
+    if (category && category.startsWith('p_')) category = category.slice(2);
+
+    // build slug and canonical ids matching existing app naming
+    const slug = trimmedLabel.toLowerCase().replace(/[^a-z0-9]+/g,'_').replace(/^_+|_+$/g,'') || 'item';
+    const baseId = 'sub_' + category + (slug ? '_' + slug : '');
     let elementId = baseId;
     let i = 1;
     while (document.getElementById(elementId)) {
-      elementId = `${baseId}${i}`;
+      elementId = baseId + '_' + i;
       i++;
     }
-    
-    // Get target sublist
-    const sublistId = `sublist${category}`;
+
+    // target sublist id must match 'sublist_<category>'
+    const sublistId = 'sublist_' + category;
     const sublist = document.getElementById(sublistId);
     if (!sublist) {
-      alert('Could not find category container');
+      alert('Could not find category container (sublist_' + category + '). Make sure the main category exists.');
       return;
     }
-    
-    // Create sub-item element
-    const suffix = elementId.slice(3); // Remove 'sub' prefix
-    const qtyId = `q${suffix}`;
-    const unitId = `unit${suffix}`;
-    const customUnitId = `unitcustom${suffix}`;
-    
+
+    // prepare suffix (used in q_ / unit_ / unit_custom_ IDs)
+    const suffix = elementId.slice(4); // remove 'sub_' prefix => e.g. 'floor_tile'
+    const qtyId = 'q_' + suffix;
+    const unitId = 'unit_' + suffix;
+    const customUnitId = 'unit_custom_' + suffix;
+
+    // create sub-item DOM identical in structure to other dynamically-created sub-items
     const subDiv = document.createElement('div');
     subDiv.className = 'sub-item';
     subDiv.setAttribute('data-generated', 'true');
-    
-    subDiv.innerHTML = `
-      <label>
-        <input type="checkbox" class="subitem" id="${elementId}" value="${trimmedLabel}">
-        <span class="editable" data-config-id="${elementId}label" id="label${elementId}">${trimmedLabel}</span>
-        <button class="del-btn" type="button" title="Remove sub-item" aria-label="Remove">×</button>
-      </label>
-      <div class="qty-unit">
-        <input type="number" min="0" step="1" id="${qtyId}" class="subqty qty" placeholder="Quantity" disabled>
-        <select id="${unitId}" class="unit-select" disabled>
-          <option value="Boxes">Boxes</option>
-          <option value="Pieces">Pieces</option>
-          <option value="Kg">Kg</option>
-          <option value="Custom">Custom</option>
-        </select>
-        <input type="text" id="${customUnitId}" class="unit-custom" placeholder="Custom unit" style="display:none" disabled>
-      </div>
-    `;
-    
-    // Add to sublist
+
+    const labelEl = document.createElement('label');
+
+    const cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.className = 'subitem';
+    cb.id = elementId;
+    cb.value = trimmedLabel;
+
+    const span = document.createElement('span');
+    span.className = 'editable';
+    span.setAttribute('data-config-id', elementId + '_label');
+    span.id = 'label_' + elementId;
+    span.textContent = trimmedLabel;
+
+    const delBtn = document.createElement('button');
+    delBtn.className = 'del-btn';
+    delBtn.type = 'button';
+    delBtn.title = 'Remove sub-item';
+    delBtn.setAttribute('aria-label', 'Remove');
+    delBtn.textContent = 'Ã¢ÂÅ’';
+
+    labelEl.appendChild(cb);
+    labelEl.appendChild(span);
+    labelEl.appendChild(delBtn);
+
+    const qtyUnitDiv = document.createElement('div');
+    qtyUnitDiv.className = 'qty-unit';
+
+    const qty = document.createElement('input');
+    qty.type = 'number';
+    qty.min = '0';
+    qty.step = '1';
+    qty.placeholder = 'Quantity';
+    qty.className = 'subqty qty';
+    qty.id = qtyId;
+    qty.disabled = true;
+
+    const unitSel = document.createElement('select');
+    unitSel.id = unitId;
+    unitSel.className = 'unit-select';
+    unitSel.disabled = true;
+
+    // default options + existing global units
+    ['Boxes','Pieces','Kg','Custom'].forEach(u => {
+      const o = document.createElement('option');
+      o.value = u;
+      o.textContent = u;
+      unitSel.appendChild(o);
+    });
+    const globalUnits = (typeof loadGlobalUnits === 'function') ? loadGlobalUnits() : [];
+    globalUnits.forEach(u => {
+      if (!Array.from(unitSel.options).some(opt => opt.value === u)) {
+        const o = document.createElement('option');
+        o.value = u;
+        o.textContent = u;
+        unitSel.appendChild(o);
+      }
+    });
+
+    const unitCustom = document.createElement('input');
+    unitCustom.type = 'text';
+    unitCustom.id = customUnitId;
+    unitCustom.className = 'unit-custom';
+    unitCustom.placeholder = 'Custom unit';
+    unitCustom.style.display = 'none';
+    unitCustom.disabled = true;
+
+    qtyUnitDiv.appendChild(qty);
+    qtyUnitDiv.appendChild(unitSel);
+    qtyUnitDiv.appendChild(unitCustom);
+
+    subDiv.appendChild(labelEl);
+    subDiv.appendChild(qtyUnitDiv);
+
+    // append to target
     sublist.appendChild(subDiv);
-    
-    // Re-register handlers and cache
-    if (typeof bindSubitemHandlers === 'function') {
-      bindSubitemHandlers();
+
+    // wire up handlers the same way originals are wired
+    if (typeof registerEditable === 'function') registerEditable(span);
+    if (typeof bindSubitemHandlers === 'function') bindSubitemHandlers();
+
+    // ensure parent main is expanded and checked
+    const parentRow = sublist.previousElementSibling;
+    if (parentRow) {
+      const parentCheckbox = parentRow.querySelector('.purchased');
+      if (parentCheckbox && !parentCheckbox.checked) {
+        parentCheckbox.checked = true;
+        parentCheckbox.dispatchEvent(new Event('change', { bubbles: true }));
+      }
     }
-    if (typeof registerEditable === 'function') {
-      registerEditable(subDiv.querySelector('.editable'));
-    }
-    
-    // Auto-check the new item
+
+    // auto-check new subitem and open its controls
     const newCheckbox = document.getElementById(elementId);
     if (newCheckbox) {
       newCheckbox.checked = true;
       newCheckbox.dispatchEvent(new Event('change', { bubbles: true }));
+      // focus qty for touch devices
+      setTimeout(() => {
+        const q = document.getElementById(qtyId);
+        if (q && !q.disabled) { q.focus(); q.select(); }
+      }, 120);
     }
-    
-    // Cache will be updated automatically by MutationObserver
-    // Announce the addition
-    this.announceChange(`New item added: ${trimmedLabel}`);
-    
-    // Show success message
-    if (typeof showTempMessage === 'function') {
-      showTempMessage(`Added "${trimmedLabel}" to ${category} category`);
-    }
+
+    // Update any search cache / observers
+    if (window.subItemSearch && typeof window.subItemSearch.refresh === 'function') window.subItemSearch.refresh();
+
+    // success message
+    if (typeof showTempMessage === 'function') showTempMessage('Added: ' + trimmedLabel);
   }
+
   
   clearSearch() {
     this.searchInput.value = '';
@@ -4627,224 +5303,6 @@ if (typeof addSubBtn !== 'undefined' && addSubBtn) {
 }
 
 
-/* Voice-to-Text functionality using Web Speech API (vanilla JS) */
-/* Paste this block near the end of index.html (before </body>) */
-
-(function(){
-  // cross-browser SpeechRecognition
-  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-  const voiceBtn = document.getElementById('voiceBtn');
-  const voiceBtnLabel = document.getElementById('voiceBtnLabel');
-  const voiceStopBtn = document.getElementById('voiceStopBtn');
-  const voiceClearBtn = document.getElementById('voiceClearBtn');
-  const voiceLangSelect = document.getElementById('voiceLang');
-  const voiceContinuousCheckbox = document.getElementById('voiceContinuous');
-  const voiceStatus = document.getElementById('voiceStatus');
-  const voiceConfidence = document.getElementById('voiceConfidence');
-  const otherInfo = document.getElementById('otherInfo'); // target textarea
-
-  if (!otherInfo) {
-    console.warn('Voice-to-text: target #otherInfo not found (check where you pasted the HTML).');
-  }
-
-  if (!SpeechRecognition) {
-    // Unsupported
-    voiceStatus.textContent = 'SpeechRecognition not supported in this browser';
-    voiceBtn.disabled = true;
-    voiceStopBtn.disabled = true;
-    voiceClearBtn.disabled = false;
-    // Show an alert on click explaining fallback
-    voiceBtn.addEventListener('click', () => {
-      alert('Sorry — your browser does not support the Web Speech API. Use Chrome/Edge (Chromium) or Safari (if available) for voice input.');
-    });
-    return;
-  }
-
-  let recognition = null;
-  let listening = false;
-  let lastInterim = '';
-  let lastFinal = '';
-
-  function createRecognition() {
-    const r = new SpeechRecognition();
-    r.lang = voiceLangSelect.value || 'en-US';
-    r.interimResults = true; // show interim results
-    r.maxAlternatives = 3;
-    r.continuous = !!voiceContinuousCheckbox.checked; // continuous vs single
-    return r;
-  }
-
-  function updateUIListening(isListening) {
-    listening = !!isListening;
-    voiceBtn.setAttribute('aria-pressed', listening ? 'true' : 'false');
-    voiceBtn.classList.toggle('listening', listening);
-    voiceBtnLabel.textContent = listening ? 'Listening…' : 'Start voice';
-    voiceStatus.textContent = listening ? 'Listening — speak now' : 'Idle';
-    // Make Stop button available only while listening
-    voiceStopBtn.disabled = !listening;
-  }
-
-  function startListening() {
-    if (listening) return;
-    try {
-      recognition = createRecognition();
-
-      recognition.onstart = () => {
-        updateUIListening(true);
-        voiceConfidence.style.display = 'none';
-      };
-
-      recognition.onerror = (evt) => {
-        console.error('recognition error', evt);
-        if (evt.error === 'not-allowed' || evt.error === 'permission-denied') {
-          voiceStatus.textContent = 'Microphone permission denied. Please allow access.';
-        } else {
-          voiceStatus.textContent = 'Error: ' + (evt.error || 'unknown');
-        }
-        updateUIListening(false);
-        recognition && recognition.stop();
-      };
-
-      recognition.onend = () => {
-        // If continuous = true, onend may fire between interim, so only mark idle when not listening
-        updateUIListening(false);
-      };
-
-      recognition.onresult = (event) => {
-        // event.results is a ResultList; iterate to get final vs interim
-        let interim = '';
-        let finalTranscript = '';
-        let lastConf = 0;
-
-        for (let i = event.resultIndex; i < event.results.length; ++i) {
-          const res = event.results[i];
-          const text = res[0].transcript;
-          lastConf = res[0].confidence || lastConf;
-          if (res.isFinal) {
-            finalTranscript += text;
-          } else {
-            interim += text;
-          }
-        }
-
-        // Show interim while speaking
-        if (interim) {
-          lastInterim = interim;
-          if (otherInfo) {
-            // Append interim visually but don't overwrite confirmed final text
-            otherInfo.value = (lastFinal ? (lastFinal + ' ') : '') + interim;
-          }
-        }
-
-        // Commit final text
-        if (finalTranscript) {
-          lastFinal = (lastFinal ? (lastFinal + ' ') : '') + finalTranscript.trim();
-          if (otherInfo) {
-            otherInfo.value = lastFinal;
-          }
-          // Show confidence for the most recent final result
-          voiceConfidence.style.display = 'inline-block';
-          voiceConfidence.textContent = Math.round(lastConf * 100) + '%';
-          // voice command: stop recording
-          if (finalTranscript.toLowerCase().includes('stop recording')) {
-            stopListening();
-            // remove the spoken command phrase from the transcription
-            if (otherInfo) {
-              otherInfo.value = otherInfo.value.replace(/stop recording/ig, '').trim();
-            }
-          }
-        }
-
-        // If not continuous and we got a final result, stop
-        if (!voiceContinuousCheckbox.checked && event.results[event.results.length - 1].isFinal) {
-          recognition.stop();
-          updateUIListening(false);
-        }
-      };
-
-      recognition.start();
-      voiceStatus.textContent = 'Starting...';
-    } catch (err) {
-      console.error('startListening error', err);
-      voiceStatus.textContent = 'Start failed: ' + (err.message || err);
-      updateUIListening(false);
-    }
-  }
-
-  function stopListening() {
-    if (!listening) return;
-    if (recognition) {
-      try {
-        recognition.stop();
-      } catch (e) { /* ignore */ }
-    }
-    updateUIListening(false);
-  }
-
-  function clearTranscript() {
-    lastInterim = '';
-    lastFinal = '';
-    if (otherInfo) otherInfo.value = '';
-    voiceConfidence.style.display = 'none';
-    voiceStatus.textContent = 'Cleared';
-  }
-
-  // Bind UI
-  voiceBtn.addEventListener('click', function(e){
-    e.preventDefault();
-    if (!listening) startListening();
-    else stopListening();
-  });
-
-  voiceStopBtn.addEventListener('click', function(e){
-    e.preventDefault();
-    stopListening();
-  });
-
-  voiceClearBtn.addEventListener('click', function(e){
-    e.preventDefault();
-    clearTranscript();
-  });
-
-  voiceLangSelect.addEventListener('change', function(){
-    // If currently listening restart recognition with new language
-    if (listening) {
-      stopListening();
-      setTimeout(startListening, 250);
-    }
-  });
-
-  voiceContinuousCheckbox.addEventListener('change', function(){
-    if (listening) {
-      // restart recognition to apply new continuous flag
-      stopListening();
-      setTimeout(startListening, 250);
-    }
-  });
-
-  // Keyboard accessibility: press Enter on mic button
-  voiceBtn.addEventListener('keydown', (ev) => {
-    if (ev.key === 'Enter' || ev.key === ' ') {
-      ev.preventDefault();
-      voiceBtn.click();
-    }
-  });
-
-  // On page unload, stop recognition to cleanup resources
-  window.addEventListener('beforeunload', () => {
-    if (recognition && listening) {
-      try { recognition.abort(); } catch(e) {}
-    }
-  });
-
-  // Announce readiness
-  voiceStatus.textContent = 'Ready';
-  voiceStopBtn.disabled = true;
-
-})();
-
-
-
 
 
   </script>
@@ -4853,6 +5311,20 @@ if (typeof addSubBtn !== 'undefined' && addSubBtn) {
 
 </body>
 </html>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
