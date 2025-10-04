@@ -3818,10 +3818,13 @@ class SubItemSearch {
     this.focusedIndex = -1;
     this.isSearchActive = false;
     this.mutationObserver = null;
-    
+
+    // map originalInputId -> handler refs for removal if needed
+    this._origListeners = {};
+
     this.init();
   }
-  
+
   init() {
     this.createSearchUI();
     this.cacheSubItems();
@@ -3829,11 +3832,11 @@ class SubItemSearch {
     this.setupMutationObserver();
     this.setupEditableListeners();
   }
-  
+
   createSearchUI() {
     const purchasedList = document.getElementById('purchasedList');
     if (!purchasedList) return;
-    
+
     // Create search container
     const searchContainer = document.createElement('div');
     searchContainer.className = 'search-container';
@@ -3849,100 +3852,201 @@ class SubItemSearch {
       </div>
       <div class="search-results" id="searchResults" style="display: none;"></div>
     `;
-    
+
     // Insert before purchased list
     purchasedList.parentNode.insertBefore(searchContainer, purchasedList);
-    
+
     this.searchInput = document.getElementById('subItemSearch');
     this.searchResults = document.getElementById('searchResults');
     this.searchCount = document.getElementById('searchCount');
     this.originalPurchasedList = purchasedList;
   }
-  
+
+  // Robust ID resolution: supports IDs like "sub_floor_marble" and "subfloormarble"
+  _deriveSuffix(checkboxId) {
+    if (!checkboxId) return '';
+    if (checkboxId.startsWith('sub_')) return checkboxId.slice(4); // sub_floor_marble -> floor_marble
+    if (checkboxId.startsWith('sub')) return checkboxId.slice(3);  // subfloormarble -> floormarble
+    // fallback
+    return checkboxId.replace(/^sub/, '');
+  }
+
+  getQtyInput(checkboxId) {
+    const suffix = this._deriveSuffix(checkboxId);
+    const candidates = [
+      `q_${suffix}`, // q_floor_marble
+      `q${suffix}`,  // qfloor_marble or qfloormarble
+      `q${suffix.replace(/_/g, '')}`
+    ];
+    for (const id of candidates) {
+      const el = document.getElementById(id);
+      if (el) return el;
+    }
+    return null;
+  }
+
+  getUnitSelect(checkboxId) {
+    const suffix = this._deriveSuffix(checkboxId);
+    const candidates = [
+      `unit_${suffix}`,   // unit_floor_marble
+      `unit${suffix}`,    // unitfloor_marble
+      `unit${suffix.replace(/_/g, '')}`
+    ];
+    for (const id of candidates) {
+      const el = document.getElementById(id);
+      if (el) return el;
+    }
+    return null;
+  }
+
+  getCustomUnitInput(checkboxId) {
+    const suffix = this._deriveSuffix(checkboxId);
+    const candidates = [
+      `unit_custom_${suffix}`, // unit_custom_floor_marble
+      `unitcustom${suffix}`,   // unitcustomfloor_marble / old patterns
+      `unitcustom_${suffix}`,
+      `unit_custom${suffix}`
+    ];
+    for (const id of candidates) {
+      const el = document.getElementById(id);
+      if (el) return el;
+    }
+    return null;
+  }
+
+  // Cache sub-items (store live references)
   cacheSubItems() {
     this.cachedSubItems = [];
     const subItems = document.querySelectorAll('.sub-item');
-    
+
     subItems.forEach(subItem => {
       const checkbox = subItem.querySelector('.subitem');
       const labelEl = subItem.querySelector('.editable');
-      const parentRow = subItem.closest('.sublist').previousElementSibling;
+      const parentRow = subItem.closest('.sublist') ? subItem.closest('.sublist').previousElementSibling : null;
       const parentLabel = parentRow ? parentRow.querySelector('.editable') : null;
-      
+
       if (checkbox && labelEl && parentLabel) {
-        this.cachedSubItems.push({
+        const cached = {
           node: subItem,
           checkbox: checkbox,
           labelEl: labelEl,
           textLower: labelEl.textContent.toLowerCase(),
-          parentId: parentRow.querySelector('.purchased').id,
+          parentId: parentRow ? (parentRow.querySelector('.purchased') ? parentRow.querySelector('.purchased').id : '') : '',
           parentLabel: parentLabel.textContent,
           qtyInput: this.getQtyInput(checkbox.id),
           unitSelect: this.getUnitSelect(checkbox.id),
           customUnitInput: this.getCustomUnitInput(checkbox.id)
-        });
+        };
+
+        this.cachedSubItems.push(cached);
+
+        // Ensure we are listening to original inputs so we can reflect live changes into the search UI
+        this._ensureOrigListeners(cached);
       }
     });
-    
+
     // Update current search if active
     if (this.isSearchActive && this.searchInput && this.searchInput.value.trim()) {
       this.performSearch(this.searchInput.value);
     }
   }
-  
- // Replace existing methods in class SubItemSearch with these:
 
-getSuffixFromCheckboxId(checkboxId) {
-  // supports ids like "sub_san_wash" or "subsan_wash" etc.
-  return checkboxId.replace(/^sub_?/, '');
-}
+  // Attach listeners to original inputs to keep search results in sync if user edits original DOM
+  _ensureOrigListeners(cached) {
+    const attach = (el, type) => {
+      if (!el) return;
+      const id = el.id;
+      if (!id) return;
 
-getQtyInput(checkboxId) {
-  const suffix = this.getSuffixFromCheckboxId(checkboxId);
-  return document.getElementById('q_' + suffix);
-}
+      if (!this._origListeners[id]) this._origListeners[id] = [];
 
-getUnitSelect(checkboxId) {
-  const suffix = this.getSuffixFromCheckboxId(checkboxId);
-  return document.getElementById('unit_' + suffix);
-}
+      // Only attach once per element/type
+      const already = this._origListeners[id].some(r => r.type === type);
+      if (already) return;
 
-getCustomUnitInput(checkboxId) {
-  const suffix = this.getSuffixFromCheckboxId(checkboxId);
-  return document.getElementById('unit_custom_' + suffix);
-}
+      const handler = () => {
+        // If search is active, reflect change to any search-result control that references this original id
+        if (!this.isSearchActive || !this.searchResults) return;
+        const selector = `[data-original-id="${id}"]`;
+        const resultNode = this.searchResults.querySelector(selector);
+        if (!resultNode) return;
 
-  
+        if (type === 'input' || type === 'change') {
+          if (el.tagName.toLowerCase() === 'select') {
+            // update select value in the search row
+            resultNode.value = el.value;
+            // If there is a related search custom unit input, show/hide
+            const container = resultNode.closest('.search-qty-unit');
+            if (container) {
+              const searchCustom = container.querySelector('.search-custom-unit');
+              if (searchCustom) {
+                if (el.value === 'Custom') {
+                  searchCustom.style.display = 'block';
+                  searchCustom.disabled = false;
+                  // populate current custom unit value from original custom input if exists
+                  const origCustom = this.getCustomUnitInput(cached.checkbox.id);
+                  if (origCustom) searchCustom.value = origCustom.value || '';
+                } else {
+                  if (searchCustom) {
+                    searchCustom.style.display = 'none';
+                    searchCustom.disabled = true;
+                  }
+                }
+              }
+            }
+          } else {
+            // normal input (qty or custom unit)
+            resultNode.value = el.value;
+          }
+        }
+      };
+
+      el.addEventListener(type, handler);
+      this._origListeners[id].push({ type, handler });
+    };
+
+    // listen for qty input changes
+    if (cached.qtyInput) attach(cached.qtyInput, 'input');
+    if (cached.qtyInput) attach(cached.qtyInput, 'change');
+
+    // unit select changes
+    if (cached.unitSelect) attach(cached.unitSelect, 'change');
+
+    // custom unit input
+    if (cached.customUnitInput) attach(cached.customUnitInput, 'input');
+    if (cached.customUnitInput) attach(cached.customUnitInput, 'change');
+  }
+
   setupMutationObserver() {
     if (!window.MutationObserver) return;
-    
+
     this.mutationObserver = new MutationObserver((mutations) => {
       let shouldReindex = false;
-      
+
       mutations.forEach(mutation => {
         // Check for added/removed sub-items
         if (mutation.type === 'childList') {
-          const hasSubItems = Array.from(mutation.addedNodes).some(node => 
-            node.nodeType === Node.ELEMENT_NODE && 
-            (node.classList.contains('sub-item') || node.querySelector('.sub-item'))
+          const hasSubItems = Array.from(mutation.addedNodes).some(node =>
+            node.nodeType === Node.ELEMENT_NODE &&
+            (node.classList.contains('sub-item') || node.querySelector && node.querySelector('.sub-item'))
           );
-          const removedSubItems = Array.from(mutation.removedNodes).some(node => 
-            node.nodeType === Node.ELEMENT_NODE && 
-            (node.classList.contains('sub-item') || node.querySelector('.sub-item'))
+          const removedSubItems = Array.from(mutation.removedNodes).some(node =>
+            node.nodeType === Node.ELEMENT_NODE &&
+            (node.classList.contains('sub-item') || node.querySelector && node.querySelector('.sub-item'))
           );
-          
+
           if (hasSubItems || removedSubItems) {
             shouldReindex = true;
           }
         }
       });
-      
+
       if (shouldReindex) {
         this.debouncedReindex();
         this.announceChange('Items updated');
       }
     });
-    
+
     // Observe the purchased list for changes
     const purchasedList = document.getElementById('purchasedList');
     if (purchasedList) {
@@ -3952,32 +4056,32 @@ getCustomUnitInput(checkboxId) {
       });
     }
   }
-  
+
   setupEditableListeners() {
     // Listen for changes to editable labels
     document.addEventListener('blur', (e) => {
-      if (e.target.classList.contains('editable')) {
+      if (e.target.classList && e.target.classList.contains('editable')) {
         this.debouncedReindex();
       }
     }, true);
-    
+
     document.addEventListener('input', (e) => {
-      if (e.target.classList.contains('editable')) {
+      if (e.target.classList && e.target.classList.contains('editable')) {
         this.debouncedReindex();
       }
     }, true);
   }
-  
+
   debouncedReindex() {
     clearTimeout(this.reindexTimeout);
     this.reindexTimeout = setTimeout(() => {
       this.cacheSubItems();
     }, 300);
   }
-  
+
   bindEvents() {
     if (!this.searchInput) return;
-    
+
     // Search input with debounce
     this.searchInput.addEventListener('input', (e) => {
       clearTimeout(this.searchTimeout);
@@ -3985,17 +4089,18 @@ getCustomUnitInput(checkboxId) {
         this.performSearch(e.target.value);
       }, 250);
     });
-    
+
     // Clear button
-    document.getElementById('searchClearBtn').addEventListener('click', () => {
+    const scb = document.getElementById('searchClearBtn');
+    if (scb) scb.addEventListener('click', () => {
       this.clearSearch();
     });
-    
+
     // Keyboard navigation
     this.searchInput.addEventListener('keydown', (e) => {
       this.handleKeydown(e);
     });
-    
+
     // Click outside to maintain focus
     document.addEventListener('click', (e) => {
       if (!e.target.closest('.search-container')) {
@@ -4004,45 +4109,45 @@ getCustomUnitInput(checkboxId) {
       }
     });
   }
-  
+
   performSearch(query) {
     const trimmedQuery = query.trim();
-    
+
     if (!trimmedQuery) {
       this.clearSearch();
       return;
     }
-    
+
     const queryLower = trimmedQuery.toLowerCase();
-    const matches = this.cachedSubItems.filter(item => 
+    const matches = this.cachedSubItems.filter(item =>
       item.textLower.includes(queryLower)
     );
-    
+
     this.displayResults(matches, trimmedQuery);
     this.announceResults(matches.length);
   }
-  
+
   displayResults(matches, originalQuery) {
     if (matches.length === 0) {
       this.showNoResults(originalQuery);
       return;
     }
-    
+
     // Group by parent
     const grouped = this.groupByParent(matches);
     const resultsHTML = this.buildResultsHTML(grouped, originalQuery);
-    
+
     this.searchResults.innerHTML = resultsHTML;
     this.searchResults.style.display = 'block';
     this.originalPurchasedList.style.display = 'none';
     this.isSearchActive = true;
     this.focusedIndex = -1;
-    
+
     this.updateSearchCount(matches.length);
     this.bindResultEvents();
     this.setupQtyUnitControls();
   }
-  
+
   groupByParent(matches) {
     const grouped = {};
     matches.forEach(match => {
@@ -4056,10 +4161,10 @@ getCustomUnitInput(checkboxId) {
     });
     return grouped;
   }
-  
+
   buildResultsHTML(grouped, query) {
     let html = '<div class="search-results-content">';
-    
+
     Object.keys(grouped).forEach(parentId => {
       const group = grouped[parentId];
       html += `
@@ -4067,21 +4172,21 @@ getCustomUnitInput(checkboxId) {
           <div class="search-group-header">${this.escapeHtml(group.parentLabel)}</div>
           <div class="search-group-items">
       `;
-      
+
       group.items.forEach((item, index) => {
         const highlighted = this.highlightMatch(item.labelEl.textContent, query);
-        const isChecked = item.checkbox.checked ? 'checked' : '';
-        const isDisabled = !item.checkbox.checked ? 'disabled' : '';
+        const isChecked = item.checkbox && item.checkbox.checked ? 'checked' : '';
+        const isDisabled = item.checkbox && !item.checkbox.checked ? 'disabled' : '';
         const qtyValue = item.qtyInput ? item.qtyInput.value : '';
         const unitValue = item.unitSelect ? item.unitSelect.value : 'Boxes';
         const customUnitValue = item.customUnitInput ? item.customUnitInput.value : '';
         const customUnitVisible = unitValue === 'Custom' ? 'style="display:block"' : 'style="display:none"';
-        
-        // Get current unit options
+
+        // Get current unit options (preserves selected option)
         const unitOptions = this.getUnitOptions(item.unitSelect);
-        
+
         html += `
-          <div class="search-result-item" data-checkbox-id="${item.checkbox.id}">
+          <div class="search-result-item" data-checkbox-id="${this.escapeHtml(item.checkbox.id || '')}">
             <div class="search-result-main">
               <label class="search-result-label">
                 <input type="checkbox" class="search-result-checkbox" ${isChecked}>
@@ -4095,34 +4200,34 @@ getCustomUnitInput(checkboxId) {
                        min="0" 
                        step="1" 
                        placeholder="Qty" 
-                       value="${qtyValue}"
+                       value="${this.escapeHtml(String(qtyValue || ''))}"
                        ${isDisabled}
-                       data-original-id="${item.qtyInput ? item.qtyInput.id : ''}">
+                       data-original-id="${item.qtyInput ? this.escapeHtml(item.qtyInput.id) : ''}">
                 <select class="search-unit-select" 
                         ${isDisabled}
-                        data-original-id="${item.unitSelect ? item.unitSelect.id : ''}">
+                        data-original-id="${item.unitSelect ? this.escapeHtml(item.unitSelect.id) : ''}">
                   ${unitOptions}
                 </select>
                 <input type="text" 
                        class="search-custom-unit" 
                        placeholder="Custom unit" 
-                       value="${customUnitValue}"
+                       value="${this.escapeHtml(String(customUnitValue || ''))}"
                        ${customUnitVisible}
                        ${isDisabled}
-                       data-original-id="${item.customUnitInput ? item.customUnitInput.id : ''}">
+                       data-original-id="${item.customUnitInput ? this.escapeHtml(item.customUnitInput.id) : ''}">
               </div>
             </div>
           </div>
         `;
       });
-      
+
       html += '</div></div>';
     });
-    
+
     html += '</div>';
     return html;
   }
-  
+
   getUnitOptions(originalSelect) {
     if (!originalSelect) {
       return `
@@ -4132,23 +4237,37 @@ getCustomUnitInput(checkboxId) {
         <option value="Custom">Custom</option>
       `;
     }
-    
+
     let options = '';
     Array.from(originalSelect.options).forEach(option => {
-      const selected = option.selected ? 'selected' : '';
-      options += `<option value="${option.value}" ${selected}>${option.text}</option>`;
+      const selected = (option.value === originalSelect.value) ? 'selected' : '';
+      options += `<option value="${this.escapeHtml(option.value)}" ${selected}>${this.escapeHtml(option.text)}</option>`;
     });
-    
+
+    // Ensure 'Custom' exists
+    if (!Array.from(originalSelect.options).some(o => o.value === 'Custom')) {
+      options += `<option value="Custom">Custom</option>`;
+    }
+
     return options;
   }
-  
+
   setupQtyUnitControls() {
     const qtyInputs = this.searchResults.querySelectorAll('.search-qty-input');
     const unitSelects = this.searchResults.querySelectorAll('.search-unit-select');
     const customUnits = this.searchResults.querySelectorAll('.search-custom-unit');
-    
-    // Sync qty inputs
+
+    // Sync qty inputs (search -> original)
     qtyInputs.forEach(input => {
+      const origId = input.dataset.originalId;
+      const originalInput = origId ? document.getElementById(origId) : null;
+
+      // Reflect original -> search if original changes (immediately set displayed value)
+      if (originalInput) {
+        // Set initial value from original (defensive)
+        input.value = originalInput.value || input.value || '';
+      }
+
       input.addEventListener('input', (e) => {
         const originalId = e.target.dataset.originalId;
         const originalInput = document.getElementById(originalId);
@@ -4157,7 +4276,7 @@ getCustomUnitInput(checkboxId) {
           originalInput.dispatchEvent(new Event('input', { bubbles: true }));
         }
       });
-      
+
       input.addEventListener('change', (e) => {
         const originalId = e.target.dataset.originalId;
         const originalInput = document.getElementById(originalId);
@@ -4167,41 +4286,67 @@ getCustomUnitInput(checkboxId) {
         }
       });
     });
-    
-    // Sync unit selects
+
+    // Sync unit selects (search -> original) and reflect original -> search initially
     unitSelects.forEach(select => {
+      const originalId = select.dataset.originalId;
+      const originalSelect = originalId ? document.getElementById(originalId) : null;
+      const customUnit = select.parentNode ? select.parentNode.querySelector('.search-custom-unit') : null;
+
+      // Initial: reflect original select value into search select (defensive)
+      if (originalSelect) {
+        // set search select value
+        select.value = originalSelect.value || select.value;
+        // set custom input if present
+        if (customUnit) {
+          const origCustom = this.getCustomUnitInput(select.closest('.search-result-item')?.dataset?.checkboxId || '');
+          if (origCustom) customUnit.value = origCustom.value || '';
+          customUnit.style.display = (originalSelect.value === 'Custom') ? 'block' : 'none';
+          customUnit.disabled = (originalSelect.value !== 'Custom');
+        }
+      }
+
       select.addEventListener('change', (e) => {
         const originalId = e.target.dataset.originalId;
         const originalSelect = document.getElementById(originalId);
-        const customUnit = e.target.parentNode.querySelector('.search-custom-unit');
-        
+        const customUnit = e.target.parentNode ? e.target.parentNode.querySelector('.search-custom-unit') : null;
+
         if (originalSelect) {
           originalSelect.value = e.target.value;
           originalSelect.dispatchEvent(new Event('change', { bubbles: true }));
-          
+
           // Handle custom unit visibility
           if (e.target.value === 'Custom') {
-            customUnit.style.display = 'block';
-            customUnit.disabled = false;
-            // Focus custom unit on mobile after a brief delay
-            setTimeout(() => {
-              if (window.innerWidth <= 768) {
-                customUnit.focus();
-              }
-            }, 100);
+            if (customUnit) {
+              customUnit.style.display = 'block';
+              customUnit.disabled = false;
+              setTimeout(() => {
+                if (window.innerWidth <= 768) customUnit.focus();
+              }, 100);
+            }
           } else {
-            customUnit.style.display = 'none';
-            customUnit.disabled = true;
+            if (customUnit) {
+              customUnit.style.display = 'none';
+              customUnit.disabled = true;
+            }
           }
-          
+
           // Save unit preference
           this.saveUnitPreference(originalId, e.target.value);
         }
       });
     });
-    
-    // Sync custom unit inputs
+
+    // Sync custom unit inputs (search -> original)
     customUnits.forEach(input => {
+      const originalId = input.dataset.originalId;
+      const originalInput = originalId ? document.getElementById(originalId) : null;
+
+      // Initial populate
+      if (originalInput) {
+        input.value = originalInput.value || input.value || '';
+      }
+
       input.addEventListener('input', (e) => {
         const originalId = e.target.dataset.originalId;
         const originalInput = document.getElementById(originalId);
@@ -4210,7 +4355,7 @@ getCustomUnitInput(checkboxId) {
           originalInput.dispatchEvent(new Event('input', { bubbles: true }));
         }
       });
-      
+
       input.addEventListener('change', (e) => {
         const originalId = e.target.dataset.originalId;
         const originalInput = document.getElementById(originalId);
@@ -4221,7 +4366,7 @@ getCustomUnitInput(checkboxId) {
       });
     });
   }
-  
+
   saveUnitPreference(originalId, unitValue) {
     if (typeof saveUnitPref === 'function') {
       saveUnitPref(originalId, unitValue);
@@ -4236,7 +4381,7 @@ getCustomUnitInput(checkboxId) {
       }
     }
   }
-  
+
   showNoResults(query) {
     this.searchResults.innerHTML = `
       <div class="search-no-results">
@@ -4252,30 +4397,30 @@ getCustomUnitInput(checkboxId) {
     this.updateSearchCount(0);
     this.bindAddSubitemEvent();
   }
-  
+
   bindResultEvents() {
     const resultItems = this.searchResults.querySelectorAll('.search-result-item');
-    
+
     resultItems.forEach((item, index) => {
       const label = item.querySelector('.search-result-label');
-      
+
       // Click/touch events on the label area
       label.addEventListener('click', (e) => {
         e.preventDefault();
         this.toggleResult(item);
       });
-      
+
       // Touch-friendly tap
       label.addEventListener('touchend', (e) => {
         e.preventDefault();
         this.toggleResult(item);
       });
-      
+
       // Store index for keyboard navigation
       item.dataset.resultIndex = index;
     });
   }
-  
+
   bindAddSubitemEvent() {
     const addBtn = this.searchResults.querySelector('.add-subitem-btn');
     if (addBtn) {
@@ -4284,7 +4429,7 @@ getCustomUnitInput(checkboxId) {
       });
     }
   }
-  
+
   toggleResult(resultItem) {
     const checkboxId = resultItem.dataset.checkboxId;
     const originalCheckbox = document.getElementById(checkboxId);
@@ -4292,28 +4437,28 @@ getCustomUnitInput(checkboxId) {
     const qtyInput = resultItem.querySelector('.search-qty-input');
     const unitSelect = resultItem.querySelector('.search-unit-select');
     const customUnit = resultItem.querySelector('.search-custom-unit');
-    
+
     if (originalCheckbox && resultCheckbox) {
       // Toggle original checkbox
       originalCheckbox.checked = !originalCheckbox.checked;
       resultCheckbox.checked = originalCheckbox.checked;
-      
-      // Trigger change event on original checkbox
+
+      // Trigger change event on original checkbox (this will also expand parent)
       originalCheckbox.dispatchEvent(new Event('change', { bubbles: true }));
-      
-      // Update controls state
+
+      // Update controls state (enable/disable)
       const isEnabled = originalCheckbox.checked;
       if (qtyInput) qtyInput.disabled = !isEnabled;
       if (unitSelect) unitSelect.disabled = !isEnabled;
       if (customUnit && unitSelect.value !== 'Custom') customUnit.disabled = !isEnabled;
-      
+
       // Update visual feedback
       resultItem.classList.toggle('selected', originalCheckbox.checked);
-      
+
       // If checked, ensure parent main category is visible/expanded
       if (originalCheckbox.checked) {
         this.ensureParentExpanded(checkboxId);
-        
+
         // Focus qty input on mobile for better UX
         if (window.innerWidth <= 768 && qtyInput && !qtyInput.disabled) {
           setTimeout(() => {
@@ -4324,15 +4469,15 @@ getCustomUnitInput(checkboxId) {
       }
     }
   }
-  
+
   ensureParentExpanded(checkboxId) {
     const originalSubitem = document.getElementById(checkboxId);
     if (!originalSubitem) return;
-    
+
     const sublist = originalSubitem.closest('.sublist');
     const parentRow = sublist ? sublist.previousElementSibling : null;
     const parentCheckbox = parentRow ? parentRow.querySelector('.purchased') : null;
-    
+
     if (parentCheckbox && sublist) {
       if (!parentCheckbox.checked) {
         parentCheckbox.checked = true;
@@ -4341,12 +4486,12 @@ getCustomUnitInput(checkboxId) {
       sublist.style.display = 'block';
     }
   }
-  
+
   handleKeydown(e) {
     if (!this.isSearchActive) return;
-    
+
     const resultItems = Array.from(this.searchResults.querySelectorAll('.search-result-item'));
-    
+
     switch (e.key) {
       case 'ArrowDown':
         e.preventDefault();
@@ -4354,14 +4499,14 @@ getCustomUnitInput(checkboxId) {
         this.updateFocusStyles();
         this.scrollToFocused();
         break;
-        
+
       case 'ArrowUp':
         e.preventDefault();
         this.focusedIndex = Math.max(this.focusedIndex - 1, -1);
         this.updateFocusStyles();
         this.scrollToFocused();
         break;
-        
+
       case 'Enter':
         e.preventDefault();
         if (this.focusedIndex >= 0 && resultItems[this.focusedIndex]) {
@@ -4376,7 +4521,7 @@ getCustomUnitInput(checkboxId) {
           }
         }
         break;
-        
+
       case 'Escape':
         e.preventDefault();
         this.clearSearch();
@@ -4384,21 +4529,21 @@ getCustomUnitInput(checkboxId) {
         break;
     }
   }
-  
+
   updateFocusStyles() {
     const resultItems = this.searchResults.querySelectorAll('.search-result-item');
     resultItems.forEach((item, index) => {
       item.classList.toggle('focused', index === this.focusedIndex);
     });
   }
-  
+
   scrollToFocused() {
     const focusedItem = this.searchResults.querySelector('.search-result-item.focused');
     if (focusedItem) {
       focusedItem.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }
   }
-  
+
   showAddSubitemModal(query) {
     const modal = document.createElement('div');
     modal.className = 'add-subitem-modal';
@@ -4413,10 +4558,10 @@ getCustomUnitInput(checkboxId) {
             <option value="san">Sanitaryware</option>
             <option value="acc">Accessories</option>
           </select>
-          
+
           <label>Sub-item name:</label>
           <input type="text" class="add-subitem-label" value="${this.escapeHtml(query)}">
-          
+
           <div class="add-subitem-actions">
             <button class="btn add-subitem-confirm">Add Sub-item</button>
             <button class="btn add-subitem-cancel">Cancel</button>
@@ -4424,14 +4569,14 @@ getCustomUnitInput(checkboxId) {
         </div>
       </div>
     `;
-    
+
     document.body.appendChild(modal);
-    
+
     // Focus input
     const labelInput = modal.querySelector('.add-subitem-label');
     labelInput.focus();
     labelInput.select();
-    
+
     // Bind events
     modal.querySelector('.add-subitem-confirm').addEventListener('click', () => {
       this.createNewSubitem(
@@ -4440,11 +4585,11 @@ getCustomUnitInput(checkboxId) {
       );
       document.body.removeChild(modal);
     });
-    
+
     modal.querySelector('.add-subitem-cancel').addEventListener('click', () => {
       document.body.removeChild(modal);
     });
-    
+
     // Close on outside click
     modal.addEventListener('click', (e) => {
       if (e.target === modal) {
@@ -4452,14 +4597,14 @@ getCustomUnitInput(checkboxId) {
       }
     });
   }
-  
+
   createNewSubitem(category, label) {
     if (!label.trim()) return;
-    
+
     const trimmedLabel = label.trim();
     const slug = trimmedLabel.toLowerCase().replace(/[^a-z0-9]/g, '');
     const baseId = `sub${category}${slug}`;
-    
+
     // Find unique ID
     let elementId = baseId;
     let i = 1;
@@ -4467,7 +4612,7 @@ getCustomUnitInput(checkboxId) {
       elementId = `${baseId}${i}`;
       i++;
     }
-    
+
     // Get target sublist
     const sublistId = `sublist${category}`;
     const sublist = document.getElementById(sublistId);
@@ -4475,17 +4620,17 @@ getCustomUnitInput(checkboxId) {
       alert('Could not find category container');
       return;
     }
-    
+
     // Create sub-item element
     const suffix = elementId.slice(3); // Remove 'sub' prefix
     const qtyId = `q${suffix}`;
     const unitId = `unit${suffix}`;
     const customUnitId = `unitcustom${suffix}`;
-    
+
     const subDiv = document.createElement('div');
     subDiv.className = 'sub-item';
     subDiv.setAttribute('data-generated', 'true');
-    
+
     subDiv.innerHTML = `
       <label>
         <input type="checkbox" class="subitem" id="${elementId}" value="${trimmedLabel}">
@@ -4503,10 +4648,10 @@ getCustomUnitInput(checkboxId) {
         <input type="text" id="${customUnitId}" class="unit-custom" placeholder="Custom unit" style="display:none" disabled>
       </div>
     `;
-    
+
     // Add to sublist
     sublist.appendChild(subDiv);
-    
+
     // Re-register handlers and cache
     if (typeof bindSubitemHandlers === 'function') {
       bindSubitemHandlers();
@@ -4514,33 +4659,33 @@ getCustomUnitInput(checkboxId) {
     if (typeof registerEditable === 'function') {
       registerEditable(subDiv.querySelector('.editable'));
     }
-    
+
     // Auto-check the new item
     const newCheckbox = document.getElementById(elementId);
     if (newCheckbox) {
       newCheckbox.checked = true;
       newCheckbox.dispatchEvent(new Event('change', { bubbles: true }));
     }
-    
+
     // Cache will be updated automatically by MutationObserver
     // Announce the addition
     this.announceChange(`New item added: ${trimmedLabel}`);
-    
+
     // Show success message
     if (typeof showTempMessage === 'function') {
       showTempMessage(`Added "${trimmedLabel}" to ${category} category`);
     }
   }
-  
+
   clearSearch() {
     this.searchInput.value = '';
-    this.searchResults.style.display = 'none';
-    this.originalPurchasedList.style.display = 'block';
+    if (this.searchResults) this.searchResults.style.display = 'none';
+    if (this.originalPurchasedList) this.originalPurchasedList.style.display = 'block';
     this.isSearchActive = false;
     this.focusedIndex = -1;
     this.updateSearchCount(0);
   }
-  
+
   updateSearchCount(count) {
     if (count === 0) {
       this.searchCount.textContent = '';
@@ -4548,13 +4693,13 @@ getCustomUnitInput(checkboxId) {
       this.searchCount.textContent = `${count} result${count === 1 ? '' : 's'}`;
     }
   }
-  
+
   announceResults(count) {
     // Screen reader announcement
     const announcement = `${count} result${count === 1 ? '' : 's'} found`;
     this.announceChange(announcement);
   }
-  
+
   announceChange(message) {
     // Screen reader announcement
     const srAnnounce = document.getElementById('sr-announce') || document.createElement('div');
@@ -4564,37 +4709,46 @@ getCustomUnitInput(checkboxId) {
     srAnnounce.textContent = message;
     document.body.appendChild(srAnnounce);
   }
-  
+
   highlightMatch(text, query) {
     const index = text.toLowerCase().indexOf(query.toLowerCase());
     if (index === -1) return this.escapeHtml(text);
-    
+
     const before = text.substring(0, index);
     const match = text.substring(index, index + query.length);
     const after = text.substring(index + query.length);
-    
+
     return `${this.escapeHtml(before)}<mark class="search-highlight">${this.escapeHtml(match)}</mark>${this.escapeHtml(after)}`;
   }
-  
+
   escapeHtml(text) {
     const div = document.createElement('div');
     div.textContent = text;
     return div.innerHTML;
   }
-  
+
   // Public methods for external integration
   reindexSubItems() {
     this.cacheSubItems();
   }
-  
+
   refresh() {
     this.cacheSubItems();
   }
-  
+
   destroy() {
     if (this.mutationObserver) {
       this.mutationObserver.disconnect();
     }
+    // remove original listeners
+    Object.keys(this._origListeners).forEach(id => {
+      const refs = this._origListeners[id];
+      const el = document.getElementById(id);
+      if (el && refs) {
+        refs.forEach(r => el.removeEventListener(r.type, r.handler));
+      }
+    });
+    this._origListeners = {};
     clearTimeout(this.searchTimeout);
     clearTimeout(this.reindexTimeout);
   }
@@ -4605,7 +4759,7 @@ document.addEventListener('DOMContentLoaded', function() {
   // Wait a bit for existing initialization to complete
   setTimeout(() => {
     window.subItemSearch = new SubItemSearch();
-    
+
     // Expose public reindex function
     window.reindexSubItems = function() {
       if (window.subItemSearch) {
@@ -4627,11 +4781,9 @@ if (typeof addSubBtn !== 'undefined' && addSubBtn) {
 }
 
 
-/* Voice-to-Text functionality using Web Speech API (vanilla JS) */
-/* Paste this block near the end of index.html (before </body>) */
 
+/* Voice-to-Text functionality - FIXED: Uses textbox as truth, preserves typed edits on restart */
 (function(){
-  // cross-browser SpeechRecognition
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
   const voiceBtn = document.getElementById('voiceBtn');
   const voiceBtnLabel = document.getElementById('voiceBtnLabel');
@@ -4641,77 +4793,87 @@ if (typeof addSubBtn !== 'undefined' && addSubBtn) {
   const voiceContinuousCheckbox = document.getElementById('voiceContinuous');
   const voiceStatus = document.getElementById('voiceStatus');
   const voiceConfidence = document.getElementById('voiceConfidence');
-  const otherInfo = document.getElementById('otherInfo'); // target textarea
+  const otherInfo = document.getElementById('otherInfo');
 
   if (!otherInfo) {
-    console.warn('Voice-to-text: target #otherInfo not found (check where you pasted the HTML).');
+    console.warn('Voice-to-text: target #otherInfo not found');
   }
 
   if (!SpeechRecognition) {
-    // Unsupported
-    voiceStatus.textContent = 'SpeechRecognition not supported in this browser';
-    voiceBtn.disabled = true;
-    voiceStopBtn.disabled = true;
-    voiceClearBtn.disabled = false;
-    // Show an alert on click explaining fallback
-    voiceBtn.addEventListener('click', () => {
-      alert('Sorry — your browser does not support the Web Speech API. Use Chrome/Edge (Chromium) or Safari (if available) for voice input.');
+    if (voiceStatus) voiceStatus.textContent = 'SpeechRecognition not supported';
+    if (voiceBtn) voiceBtn.disabled = true;
+    if (voiceStopBtn) voiceStopBtn.disabled = true;
+    voiceBtn && voiceBtn.addEventListener('click', () => {
+      alert('Browser does not support Web Speech API. Use Chrome/Edge/Safari.');
     });
     return;
   }
 
+  // CRITICAL: Disable autocomplete and form restoration
+  if (otherInfo) {
+    otherInfo.setAttribute('autocomplete', 'off');
+    otherInfo.setAttribute('autocorrect', 'off');
+    otherInfo.setAttribute('autocapitalize', 'off');
+    otherInfo.setAttribute('spellcheck', 'false');
+    // Prevent browser from restoring value on back/forward
+    otherInfo.form && otherInfo.form.setAttribute('autocomplete', 'off');
+  }
+
   let recognition = null;
   let listening = false;
-  let lastInterim = '';
-  let lastFinal = '';
+  // currentSessionText is the single source-of-truth for "committed" content.
+  let currentSessionText = ''; // Starts empty on page load (your load handler may clear it).
 
   function createRecognition() {
     const r = new SpeechRecognition();
     r.lang = voiceLangSelect.value || 'en-US';
-    r.interimResults = true; // show interim results
+    r.interimResults = true;
     r.maxAlternatives = 3;
-    r.continuous = !!voiceContinuousCheckbox.checked; // continuous vs single
+    r.continuous = !!voiceContinuousCheckbox.checked;
     return r;
   }
 
   function updateUIListening(isListening) {
     listening = !!isListening;
-    voiceBtn.setAttribute('aria-pressed', listening ? 'true' : 'false');
-    voiceBtn.classList.toggle('listening', listening);
-    voiceBtnLabel.textContent = listening ? 'Listening…' : 'Start voice';
-    voiceStatus.textContent = listening ? 'Listening — speak now' : 'Idle';
-    // Make Stop button available only while listening
-    voiceStopBtn.disabled = !listening;
+    voiceBtn && voiceBtn.setAttribute('aria-pressed', listening ? 'true' : 'false');
+    voiceBtn && voiceBtn.classList.toggle('listening', listening);
+    if (voiceBtnLabel) voiceBtnLabel.textContent = listening ? 'Listening…' : 'Start voice';
+    if (voiceStatus) voiceStatus.textContent = listening ? 'Listening — speak now' : 'Ready';
+    if (voiceStopBtn) voiceStopBtn.disabled = !listening;
   }
 
   function startListening() {
     if (listening) return;
+
+    // CRITICAL CHANGE: Do NOT clear currentSessionText or otherInfo.value.
+    // Instead, treat whatever is currently in the textbox as the starting committed text.
+    currentSessionText = otherInfo ? otherInfo.value || '' : '';
+
     try {
       recognition = createRecognition();
 
       recognition.onstart = () => {
         updateUIListening(true);
-        voiceConfidence.style.display = 'none';
+        if (voiceConfidence) voiceConfidence.style.display = 'none';
       };
 
       recognition.onerror = (evt) => {
         console.error('recognition error', evt);
         if (evt.error === 'not-allowed' || evt.error === 'permission-denied') {
-          voiceStatus.textContent = 'Microphone permission denied. Please allow access.';
+          if (voiceStatus) voiceStatus.textContent = 'Microphone permission denied';
         } else {
-          voiceStatus.textContent = 'Error: ' + (evt.error || 'unknown');
+          if (voiceStatus) voiceStatus.textContent = 'Error: ' + (evt.error || 'unknown');
         }
         updateUIListening(false);
-        recognition && recognition.stop();
+        try { recognition && recognition.stop(); } catch(e) {}
       };
 
       recognition.onend = () => {
-        // If continuous = true, onend may fire between interim, so only mark idle when not listening
+        // keep currentSessionText intact — do not clear it
         updateUIListening(false);
       };
 
       recognition.onresult = (event) => {
-        // event.results is a ResultList; iterate to get final vs interim
         let interim = '';
         let finalTranscript = '';
         let lastConf = 0;
@@ -4720,6 +4882,7 @@ if (typeof addSubBtn !== 'undefined' && addSubBtn) {
           const res = event.results[i];
           const text = res[0].transcript;
           lastConf = res[0].confidence || lastConf;
+
           if (res.isFinal) {
             finalTranscript += text;
           } else {
@@ -4727,46 +4890,54 @@ if (typeof addSubBtn !== 'undefined' && addSubBtn) {
           }
         }
 
-        // Show interim while speaking
+        // Show committed text + interim (interim is only the live portion)
         if (interim) {
-          lastInterim = interim;
-          if (otherInfo) {
-            // Append interim visually but don't overwrite confirmed final text
-            otherInfo.value = (lastFinal ? (lastFinal + ' ') : '') + interim;
-          }
+          // Build a clean display: committed text, optional space, then interim
+          const base = currentSessionText ? String(currentSessionText).trim() : '';
+          otherInfo && (otherInfo.value = base ? (base + ' ' + interim) : interim);
         }
 
-        // Commit final text
+        // Commit final transcript to the session text
         if (finalTranscript) {
-          lastFinal = (lastFinal ? (lastFinal + ' ') : '') + finalTranscript.trim();
-          if (otherInfo) {
-            otherInfo.value = lastFinal;
-          }
-          // Show confidence for the most recent final result
-          voiceConfidence.style.display = 'inline-block';
-          voiceConfidence.textContent = Math.round(lastConf * 100) + '%';
-          // voice command: stop recording
-          if (finalTranscript.toLowerCase().includes('stop recording')) {
-            stopListening();
-            // remove the spoken command phrase from the transcription
-            if (otherInfo) {
-              otherInfo.value = otherInfo.value.replace(/stop recording/ig, '').trim();
+          finalTranscript = finalTranscript.trim();
+          if (finalTranscript) {
+            // Append final text to currentSessionText with a single separating space if needed
+            currentSessionText = currentSessionText ? (currentSessionText.trim() + ' ' + finalTranscript) : finalTranscript;
+            otherInfo && (otherInfo.value = currentSessionText);
+
+            if (voiceConfidence) {
+              voiceConfidence.style.display = 'inline-block';
+              voiceConfidence.textContent = Math.round(lastConf * 100) + '%';
+            }
+
+            // Voice command: stop recording (remove wording and stop)
+            if (finalTranscript.toLowerCase().includes('stop recording')) {
+              // remove the phrase from the visible text and committed session
+              if (otherInfo) {
+                const cleaned = otherInfo.value.replace(/stop recording/ig, '').trim();
+                otherInfo.value = cleaned;
+                currentSessionText = cleaned;
+              } else {
+                currentSessionText = currentSessionText.replace(/stop recording/ig, '').trim();
+              }
+              stopListening();
             }
           }
         }
 
-        // If not continuous and we got a final result, stop
-        if (!voiceContinuousCheckbox.checked && event.results[event.results.length - 1].isFinal) {
-          recognition.stop();
+        // Stop after first final result if not continuous
+        const lastIsFinal = event.results && event.results[event.results.length - 1] && event.results[event.results.length - 1].isFinal;
+        if (!voiceContinuousCheckbox.checked && lastIsFinal) {
+          try { recognition.stop(); } catch(e) {}
           updateUIListening(false);
         }
       };
 
       recognition.start();
-      voiceStatus.textContent = 'Starting...';
+      if (voiceStatus) voiceStatus.textContent = 'Starting...';
     } catch (err) {
       console.error('startListening error', err);
-      voiceStatus.textContent = 'Start failed: ' + (err.message || err);
+      if (voiceStatus) voiceStatus.textContent = 'Start failed: ' + (err.message || err);
       updateUIListening(false);
     }
   }
@@ -4779,21 +4950,65 @@ if (typeof addSubBtn !== 'undefined' && addSubBtn) {
       } catch (e) { /* ignore */ }
     }
     updateUIListening(false);
+    // keep currentSessionText as-is
+  }
+
+  // Helper: remove the last word (Unicode-aware, with fallback)
+  function deleteLastWord(text) {
+    if (!text) return '';
+    // Try Intl.Segmenter for better word splits
+    if (window.Intl && window.Intl.Segmenter) {
+      try {
+        const seg = new Intl.Segmenter(undefined, { granularity: 'word' });
+        const parts = Array.from(seg.segment(text));
+        // Remove trailing non-word (spaces/punct)
+        while (parts.length && parts[parts.length - 1].isWordLike === false) parts.pop();
+        // Remove one word
+        if (parts.length) parts.pop();
+        // Rebuild string and trim trailing spaces
+        return parts.map(p => p.segment).join('').replace(/\s+$/u, '');
+      } catch {}
+    }
+    // Fallback: trim end, then strip last token
+    return text
+      .replace(/\s+$/u, '')
+      .replace(/[\p{L}\p{N}\p{M}\p{Pc}\p{Pd}]+[^\S\r\n]*$/u, '')
+      .replace(/[^\S\r\n]+$/u, '');
+  }
+
+  const voiceBackspaceBtn = document.getElementById('voiceBackspaceBtn');
+  if (voiceBackspaceBtn && otherInfo) {
+    voiceBackspaceBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      const next = deleteLastWord(otherInfo.value || '');
+      otherInfo.value = next;
+      // Keep caret at end and focus
+      otherInfo.focus();
+      try { otherInfo.setSelectionRange(otherInfo.value.length, otherInfo.value.length); } catch(e){}
+      // Sync committed session text so recognition does not restore removed words
+      currentSessionText = otherInfo.value;
+    });
   }
 
   function clearTranscript() {
-    lastInterim = '';
-    lastFinal = '';
-    if (otherInfo) otherInfo.value = '';
-    voiceConfidence.style.display = 'none';
-    voiceStatus.textContent = 'Cleared';
+    // CRITICAL: Clear everything and reset session
+    currentSessionText = '';
+    if (otherInfo) {
+      otherInfo.value = '';
+      otherInfo.blur(); // Remove focus to prevent auto-restore
+    }
+    if (voiceConfidence) voiceConfidence.style.display = 'none';
+    if (voiceStatus) voiceStatus.textContent = 'Cleared';
   }
 
   // Bind UI
   voiceBtn.addEventListener('click', function(e){
     e.preventDefault();
-    if (!listening) startListening();
-    else stopListening();
+    if (!listening) {
+      startListening();
+    } else {
+      stopListening();
+    }
   });
 
   voiceStopBtn.addEventListener('click', function(e){
@@ -4807,7 +5022,6 @@ if (typeof addSubBtn !== 'undefined' && addSubBtn) {
   });
 
   voiceLangSelect.addEventListener('change', function(){
-    // If currently listening restart recognition with new language
     if (listening) {
       stopListening();
       setTimeout(startListening, 250);
@@ -4816,13 +5030,11 @@ if (typeof addSubBtn !== 'undefined' && addSubBtn) {
 
   voiceContinuousCheckbox.addEventListener('change', function(){
     if (listening) {
-      // restart recognition to apply new continuous flag
       stopListening();
       setTimeout(startListening, 250);
     }
   });
 
-  // Keyboard accessibility: press Enter on mic button
   voiceBtn.addEventListener('keydown', (ev) => {
     if (ev.key === 'Enter' || ev.key === ' ') {
       ev.preventDefault();
@@ -4830,18 +5042,57 @@ if (typeof addSubBtn !== 'undefined' && addSubBtn) {
     }
   });
 
-  // On page unload, stop recognition to cleanup resources
+  // CRITICAL: Clear text on form submit to prevent restoration (keeps previous behaviour)
+  if (otherInfo && otherInfo.form) {
+    otherInfo.form.addEventListener('submit', function() {
+      setTimeout(() => {
+        currentSessionText = '';
+        if (otherInfo) {
+          otherInfo.value = '';
+          otherInfo.blur();
+        }
+      }, 100);
+    });
+  }
+
+  // CRITICAL: Clear on page load/reload to prevent browser restoration (keeps previous behaviour)
+  window.addEventListener('load', () => {
+    if (otherInfo) {
+      otherInfo.value = '';
+      currentSessionText = '';
+    }
+  });
+
+  // CRITICAL: Prevent focus from restoring old values
+  if (otherInfo) {
+    otherInfo.addEventListener('focus', function() {
+      // If not currently listening and field is empty, keep it empty
+      if (!listening && !currentSessionText) {
+        this.value = '';
+      }
+    });
+
+    // IMPORTANT: keep the committed session text in sync with manual typing
+    otherInfo.addEventListener('input', function() {
+      // When user types manually, make that the source-of-truth for future speech appends.
+      currentSessionText = this.value;
+    });
+  }
+
   window.addEventListener('beforeunload', () => {
     if (recognition && listening) {
       try { recognition.abort(); } catch(e) {}
     }
+    // Don't save any draft
+    if (otherInfo) {
+      otherInfo.value = '';
+    }
   });
 
-  // Announce readiness
-  voiceStatus.textContent = 'Ready';
-  voiceStopBtn.disabled = true;
-
+  if (voiceStatus) voiceStatus.textContent = 'Ready';
+  if (voiceStopBtn) voiceStopBtn.disabled = true;
 })();
+
 
 
 
@@ -4853,6 +5104,7 @@ if (typeof addSubBtn !== 'undefined' && addSubBtn) {
 
 </body>
 </html>
+
 
 
 
